@@ -113,6 +113,7 @@ export interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
   stream?: boolean;
+  reasoning_effort?: import('./protocol/reasoning.js').ReasoningEffort;
 }
 
 /**

@@ -54,6 +54,7 @@ export class TraeAdapter implements ProviderAdapter {
   readonly id: string;
   readonly displayName: string;
   readonly sandbox = 'behavioural' as const;
+  readonly bridgeReasoning = true;
   readonly region: TraeRegion;
   private readonly edition: TraeEdition;
 
@@ -149,6 +150,7 @@ export class TraeAdapter implements ProviderAdapter {
           ...(m.name === undefined ? {} : { name: m.name }),
           ...(m.wireConfigName === undefined ? {} : { wireConfigName: m.wireConfigName }),
           ...(m.wireFunction === undefined ? {} : { wireFunction: m.wireFunction }),
+          ...(m.reasoning === undefined || m.reasoningSupported === false ? {} : { reasoning: m.reasoning }),
         })),
       };
       const bridge = new TraeSoloBridge(
@@ -405,6 +407,7 @@ export class TraeSession implements ProviderSession {
       model: input.model,
       messages: input.messages,
       stream: true,
+      ...(input.reasoning_effort === undefined ? {} : { reasoning_effort: input.reasoning_effort }),
     });
     const url = `${this.lease.shim.baseUrl()}/v1/chat/completions`;
     // T010：共享 shim 后，cancel 不再关整个 shim（会误杀并发会话）——
@@ -422,7 +425,8 @@ export class TraeSession implements ProviderSession {
       });
       if (!response.ok) {
         const detail = redactLogText(await response.text().catch(() => ''));
-        throw new TraeStreamError(`trae shim rejected request: HTTP ${response.status} ${detail}`);
+        throw Object.assign(new TraeStreamError(`trae shim rejected request: HTTP ${response.status} ${detail}`),
+          response.status === 400 ? { statusCode: 400 } : {});
       }
       if (response.body === null) throw new TraeStreamError('trae shim returned no body');
       reader = response.body.getReader();

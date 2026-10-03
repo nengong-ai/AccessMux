@@ -34,6 +34,7 @@ import { parseWorkBuddyCatalogResponse } from './parse-catalog.js';
 import { fetchWorkBuddyMetadata, retainWorkBuddyPromotionOnBaseRate } from './catalog-metadata.js';
 import { officialModelContext } from '../qoder/catalog-specs.js';
 import { prepareWorkBuddyChatBody } from './body-shaper.js';
+import { workBuddyReasoningFields } from './reasoning-fields.js';
 import { buildWorkBuddyCatalogHeaders, buildWorkBuddyChatHeaders } from './headers.js';
 import {
   WorkBuddyCredentialStore,
@@ -77,6 +78,7 @@ export class WorkBuddyAdapter implements ProviderAdapter {
   readonly id = 'workbuddy';
   readonly displayName = 'WorkBuddy';
   readonly sandbox = 'behavioural' as const;
+  readonly bridgeReasoning = true;
   readonly variant: WorkBuddyVariant;
 
   private readonly catalog: WorkBuddyCatalog;
@@ -219,7 +221,8 @@ export class WorkBuddyAdapter implements ProviderAdapter {
       const entry = this.catalog.current().find((m) => m.id === modelId);
       prepared = prepareWorkBuddyChatBody(bodyJson, {
         variant: this.variant,
-        reasoningSupported: entry?.reasoning?.supportedEfforts ?? [],
+        reasoningSupported: entry?.reasoning ? workBuddyReasoningFields(entry.reasoning).supported : [],
+        strictReasoning: true,
       });
     } catch (error: unknown) {
       const message = safeCredentialError(error, credential);
@@ -386,6 +389,7 @@ export class WorkBuddySession implements ProviderSession {
       model: input.model,
       messages: input.messages,
       stream: true,
+      ...(input.reasoning_effort === undefined ? {} : { reasoning_effort: input.reasoning_effort }),
     });
     const url = `${this.lease.shim.baseUrl()}/v1/chat/completions`;
     // T010：共享 shim 后，cancel 不能再关整个 shim（会误杀并发会话）——
@@ -403,7 +407,8 @@ export class WorkBuddySession implements ProviderSession {
       });
       if (!response.ok) {
         const detail = redactLogText(await response.text().catch(() => ''));
-        throw new WorkBuddyStreamError(`workbuddy shim rejected request: HTTP ${response.status} ${detail}`);
+        throw Object.assign(new WorkBuddyStreamError(`workbuddy shim rejected request: HTTP ${response.status} ${detail}`),
+          response.status === 400 ? { statusCode: 400 } : {});
       }
       if (response.body === null) throw new WorkBuddyStreamError('workbuddy shim returned no body');
       reader = response.body.getReader();

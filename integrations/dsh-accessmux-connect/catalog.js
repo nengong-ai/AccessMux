@@ -2,8 +2,8 @@
  * AccessMux 模型目录：从本地守护的 `GET /v1/models` 拉取清单，并把每行
  * `<adapterId>:<modelId>` 翻译成 pi-ai 模型描述符所需的全部元数据。
  *
- * 守护的 /v1/models 只报 id 与来源（owned_by），不报上下文窗口、输出上限或
- * 模态——这些由 {@link modelMeta} 按来源补齐，取值与 T006 配置直连时期
+ * 桥接思考控制只消费目录的 bridgeReasoning。上下文窗口、输出上限与
+ * 模态仍由 {@link modelMeta} 按来源保守声明，取值与 T006 配置直连时期
  * DSH 里验证过的一组声明一致。补齐值是保守下限：声明小了只会限制用法，
  * 声明大了会在上游真实截断处炸出难以理解的错误。
  *
@@ -36,6 +36,7 @@ const FETCH_TIMEOUT_MS = 5_000
  * @property {string} adapterId 冒号前的来源段（`workbuddy` / `trae-cn` / `trae-global`）。
  * @property {string} shortId 冒号后的模型段，仅在显示名里出现。
  * @property {string} name 选择器显示名（优先守护公开显示名）。
+ * @property {import('@earendil-works/pi-ai').ThinkingLevelMap} [thinkingLevelMap] 已验证桥接档位；未支持键显式 null。
  */
 
 /**
@@ -62,10 +63,31 @@ export function parseModelsResponse(payload) {
     if (info !== undefined) {
       const suppliedName = /** @type {{name?: unknown, display_name?: unknown}} */ (entry).display_name ?? /** @type {{name?: unknown}} */ (entry).name
       const name = typeof suppliedName === 'string' ? suppliedName.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 180) : ''
-      models.push(name ? { ...info, name } : info)
+      const thinkingLevelMap = parseBridgeReasoning(/** @type {{bridgeReasoning?: unknown}} */ (entry).bridgeReasoning)
+      models.push({ ...info, ...(name ? { name } : {}), ...(thinkingLevelMap ? { thinkingLevelMap } : {}) })
     }
   }
   return models
+}
+
+/** pi-ai 0.87.1 / dsh-llm-pi-ai 0.2.0-rc.2 的公共词表。 */
+export const THINKING_LEVELS = /** @type {const} */ (['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+/**
+ * 只消费 daemon 的有效桥接控制，不从上游 reasoning 推断。
+ * 未提供/未知/无效集合不扩成默认全档；所有未支持键显式 null，防 SDK 补档。
+ * @param {unknown} value
+ * @returns {import('@earendil-works/pi-ai').ThinkingLevelMap | undefined}
+ */
+export function parseBridgeReasoning(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const capability = /** @type {{supported?: unknown, supportedEfforts?: unknown, canDisableThinking?: unknown}} */ (value)
+  if (capability.supported !== true || !Array.isArray(capability.supportedEfforts)) return undefined
+  const efforts = capability.supportedEfforts
+  const supported = THINKING_LEVELS.filter(level => efforts.includes(level) &&
+    (level !== 'off' || capability.canDisableThinking === true))
+  if (supported.length === 0) return undefined
+  return Object.fromEntries(THINKING_LEVELS.map(level => [level, supported.includes(level) ? level : null]))
 }
 
 /**
@@ -191,5 +213,6 @@ export class AccessMuxCatalog {
 
 /** @param {AccessMuxModelInfo[]} a @param {AccessMuxModelInfo[]} b */
 function sameRoster(a, b) {
-  return a.length === b.length && a.every((info, index) => info.id === b[index].id && info.name === b[index].name)
+  return a.length === b.length && a.every((info, index) => info.id === b[index].id && info.name === b[index].name &&
+    THINKING_LEVELS.every(level => info.thinkingLevelMap?.[level] === b[index].thinkingLevelMap?.[level]))
 }

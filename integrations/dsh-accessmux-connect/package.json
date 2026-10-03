@@ -2,7 +2,7 @@
   "name": "dsh-accessmux-connect",
   "displayName": "DSH AccessMux Connect",
   "description": "把 AccessMux 本地桥接守护的模型（workbuddy:* / trae-cn:* / trae-global:*）接入 DeepSeek Harness，零凭据配置 — bring AccessMux bridged models into DeepSeek Harness with zero credentials.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "AccessMux",
   "keywords": [
     "dsh-plugin",

@@ -62,7 +62,7 @@ export function workBuddyReasoningFields(cap: ReasoningCapabilityObservation): R
     ? cap.observed.efforts.map(normaliseEffort).filter((v): v is WorkBuddyReasoningEffort => v !== undefined)
     : [];
   const source = declared.length > 0 ? declared : observed;
-  const allowed = source.filter((effort) => effort !== 'minimal'); // 端口 spec §2.2.6 #3
+  const allowed = source.filter((effort) => effort !== 'minimal' && (effort !== 'off' || cap.canDisableThinking === true));
   if (cap.canDisableThinking === true && !allowed.includes('off')) {
     return { reasoning: true, supported: ['off', ...allowed] };
   }

@@ -47,15 +47,15 @@ describe('TraeSoloBridge chatStream', () => {
     expect(parsed.function).toBe('solo_work_remote');
   });
 
-  it('reasoning_effort 不在能力表内被剥离', async () => {
+  it('reasoning_effort 不在能力表内时 400，且不调用上游', async () => {
     let captured = '';
     const bridge = new TraeSoloBridge(
       async (body) => { captured = body; return okResult('glm-5.2', ['x']); },
       { current: () => [{ id: 'glm-5.2', name: 'GLM-5.2', reasoning: { supported: ['low', 'medium'] } }] },
     );
-    await bridge.chatStream({ bodyJson: JSON.stringify({ model: 'glm-5.2', messages: [{ role: 'user', content: 'hi' }], reasoning_effort: 'xhigh' }) });
-    const parsed = JSON.parse(captured) as { reasoning_effort?: string };
-    expect(parsed.reasoning_effort).toBeUndefined();
+    const result = await bridge.chatStream({ bodyJson: JSON.stringify({ model: 'glm-5.2', messages: [{ role: 'user', content: 'hi' }], reasoning_effort: 'xhigh' }) });
+    expect(result.status).toBe(400);
+    expect(captured).toBe('');
   });
 
   it('reasoning_effort 在能力表内保留', async () => {

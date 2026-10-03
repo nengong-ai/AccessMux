@@ -14,6 +14,8 @@ export interface PrepareWorkBuddyChatBodyOptions {
   variant?: WorkBuddyVariant;
   /** 当前模型声明的 reasoning capability（从 catalog 推）。 */
   reasoningSupported: readonly string[];
+  /** Adapter public path: reject unknown/unsupported input, including Global off. */
+  strictReasoning?: boolean;
 }
 
 function normaliseReasoningEffort(value: unknown): string | undefined {
@@ -37,7 +39,7 @@ function normalizeDeveloperRole(obj: Record<string, unknown>): void {
  * T010 终验实锤：上游对第三方 agent harness 的 system prompt 有指纹门
  * （400 code 11128 "Illegal API invocation from an unapproved channel"——
  * 命中 Claude Code 系模板句 "Main branch (you will usually use this for PRs)"
- * 即拦，一词之差即过，5/5 确定性；见 internal development record 终验章节）。
+ * 即拦，一词之差即过，5/5 确定性；见 receipts/R010 终验章节）。
  *
  * 被剥离的是**宿主自己的工装提示词**（ZCode/DSH 等注入的行为约定）；
  * 用户对话内容在 user/assistant 消息里，原样保留。宿主注入的项目上下文
@@ -106,6 +108,10 @@ export function prepareWorkBuddyChatBody(source: string, options: PrepareWorkBud
   normalizeDeveloperRole(body);
   stripSystemPromptForFingerprintGate(body);
   normalizeToolChoice(body);
+  if (options.strictReasoning && input['reasoning_effort'] !== undefined &&
+      (typeof input['reasoning_effort'] !== 'string' || !options.reasoningSupported.includes(input['reasoning_effort']))) {
+    throw new Error('WorkBuddy model does not advertise requested reasoning effort');
+  }
   const effort = normaliseReasoningEffort(input['reasoning_effort']);
   if (effort !== undefined) {
     const allowed = options.reasoningSupported;

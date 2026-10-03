@@ -20,7 +20,7 @@
 import { createProvider } from '@earendil-works/pi-ai'
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
-import { resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { modelMeta } from './catalog.js'
 
 /** Provider 流式读期间的空闲上限（与 workbuddy 路由同值）。 */
@@ -86,10 +86,12 @@ class FirstRefreshGatedAdapter extends PiAiAdapter {
   /**
    * @param {import('@deepseek-ai/dsh-llm-pi-ai').PiAiAdapterOptions} config
    * @param {() => Promise<unknown>} awaitFirstRefresh
+   * @param {() => PiAiAdapter} explicitOffAdapter
    */
-  constructor(config, awaitFirstRefresh) {
+  constructor(config, awaitFirstRefresh, explicitOffAdapter) {
     super(config)
     this.awaitFirstRefresh = awaitFirstRefresh
+    this.explicitOffAdapter = explicitOffAdapter
   }
 
   /** 门 promise 拒绝也当放行（刷新链自身的问题不该挡在消费前面）。 */
@@ -112,13 +114,27 @@ class FirstRefreshGatedAdapter extends PiAiAdapter {
   /** @param {string} provider @param {string} model @param {AbortSignal} [signal] */
   async prepareCall(provider, model, signal) {
     await this.passGate()
-    return super.prepareCall(provider, model, signal)
+    // 两个真实 SDK 入口同步捕获同一次目录快照；请求间不共享 mutable off 状态。
+    const normal = super.prepareCall(provider, model, signal)
+    const explicitOff = this.explicitOffAdapter().prepareCall(provider, model, signal)
+    const [prepared, offPrepared] = await Promise.all([normal, explicitOff])
+    return {
+      model: prepared.model,
+      stream: (/** @type {import('@deepseek-ai/dsh-llm').GenerateOptions} */ options) => {
+        const effort = options.reasoningEffort
+        if (effort !== undefined && !prepared.model.reasoning?.efforts.some(item => item.id === effort)) {
+          throw new LlmError(`AccessMux model "${model}" does not support reasoning effort "${effort}"`, 'UNSUPPORTED_REASONING_EFFORT')
+        }
+        return (effort === 'off' ? offPrepared : prepared).stream(options)
+      },
+    }
   }
 
   /** @param {import('@deepseek-ai/dsh-llm').GenerateOptions} options */
   async *stream(options) {
     await this.passGate()
-    yield* super.stream(options)
+    const prepared = await this.prepareCall(options.provider, options.model, options.signal)
+    yield* prepared.stream(options)
   }
 }
 
@@ -138,6 +154,7 @@ export function createAccessmuxAdapter(options) {
 
   const buildModels = () => options.catalog.current().map(info => toPiModel(info, options.baseURL, providerId))
 
+  const api = openAICompletionsApi()
   const base = createProvider({
     id: providerId,
     name: displayName,
@@ -153,12 +170,20 @@ export function createAccessmuxAdapter(options) {
       },
     },
     models: buildModels(),
-    api: openAICompletionsApi(),
+    api,
   })
 
-  // getModels 委托给活读（reuse-catalog 模式，同 dsh-workbuddy-connect）：
-  // 流式分发仍走构造好的 provider，而目录答案跟着刷新走。
-  const provider = { ...base, getModels: () => buildModels() }
+  // 目录快照共用协议实现；未选档位的默认传输不发送 off。
+  const provider = {
+    ...base,
+    getModels: () => buildModels(),
+    // SDK 把 off 和未选档位都转成 undefined。默认调用清除 off wire 映射，
+    // 显式 off 使用独立 SDK/profile 保留映射，避免省略选项变成关闭。
+    streamSimple: (/** @type {import('@earendil-works/pi-ai').Model<'openai-completions'>} */ model,
+      /** @type {import('@earendil-works/pi-ai').TranscriptContext} */ context,
+      /** @type {import('@earendil-works/pi-ai').SimpleStreamOptions | undefined} */ streamOptions) =>
+      api.streamSimple({ ...model, thinkingLevelMap: { ...model.thinkingLevelMap, off: null } }, context, streamOptions),
+  }
 
   const profile = {
     provider: providerId,
@@ -171,25 +196,30 @@ export function createAccessmuxAdapter(options) {
     piProvider: provider,
   }
 
-  /** PiAiAdapter 以 profiles 对象的同一性识别快照失效。 */
-  let profiles = /** @type {Map<string, import('@deepseek-ai/dsh-llm-pi-ai').ResolvedPiAiProviderProfile>} */ (
-    new Map([[providerId, /** @type {import('@deepseek-ai/dsh-llm-pi-ai').ResolvedPiAiProviderProfile} */ (profile)]])
-  )
-
+  // 活目录只在 SDK 首次消费/显式 invalidate 时投影。快照内 getModels
+  // 必须返回固定数组；否则已 prepare 的请求也会读到下一次目录能力。
+  /** @type {Map<string, import('@deepseek-ai/dsh-llm-pi-ai').ResolvedPiAiProviderProfile> | undefined} */
+  let profiles
+  const currentProfiles = () => {
+    if (profiles === undefined) {
+      const models = buildModels()
+      profiles = new Map([[providerId, { ...profile, piProvider: { ...provider, getModels: () => models } }]])
+    }
+    return profiles
+  }
   const adapter = new FirstRefreshGatedAdapter({
-    profiles: () => profiles,
+    profiles: currentProfiles,
     auth: INERT_AUTH,
     resolveApiKey: async () => apiKeyOf(),
-  }, awaitFirstRefresh)
+  }, awaitFirstRefresh, () => {
+    const frozenProfiles = new Map([...currentProfiles()].map(([id, current]) => {
+      if (current.piProvider === undefined) throw new Error('AccessMux SDK provider missing')
+      return [id, { ...current, piProvider: { ...current.piProvider, streamSimple: api.streamSimple } }]
+    }))
+    return new PiAiAdapter({ profiles: () => frozenProfiles, auth: INERT_AUTH, resolveApiKey: async () => apiKeyOf() })
+  })
 
-  return {
-    adapter,
-    invalidate: () => {
-      profiles = /** @type {Map<string, import('@deepseek-ai/dsh-llm-pi-ai').ResolvedPiAiProviderProfile>} */ (
-        new Map([[providerId, /** @type {import('@deepseek-ai/dsh-llm-pi-ai').ResolvedPiAiProviderProfile} */ (profile)]])
-      )
-    },
-  }
+  return { adapter, invalidate: () => { profiles = undefined } }
 }
 
 /**
@@ -214,12 +244,11 @@ function toPiModel(info, baseURL, providerId) {
     provider: providerId,
     baseUrl: baseURL,
     input: meta.input,
-    // 不声明 reasoning：模型目录不带思考档位信息，缺省即"无思考控制"，
-    // wire 上不会出现 reasoning_effort 字段（与 T006 配置直连的声明一致）。
-    reasoning: false,
+    reasoning: info.thinkingLevelMap !== undefined,
+    ...(info.thinkingLevelMap === undefined ? {} : { thinkingLevelMap: info.thinkingLevelMap }),
     cost: NO_COST,
     contextWindow: meta.contextWindow,
     maxTokens: meta.maxTokens,
-    compat: { maxTokensField: 'max_tokens' },
+    compat: { maxTokensField: 'max_tokens', supportsReasoningEffort: true, thinkingFormat: 'openai' },
   })
 }

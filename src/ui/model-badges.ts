@@ -1,6 +1,7 @@
 import type { MetadataSource, ModelActivity, ModelInfo, ModelMetadata, PriceMultiplier, TokenLimit } from '../types.js';
 import { officialModelContext, tokenValue } from '../adapters/qoder/catalog-specs.js';
 import { formatModelActivity } from './public/activity-presentation.js';
+import { bridgeReasoningCapability } from '../protocol/reasoning.js';
 
 function text(value: unknown, limit?: number): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -171,6 +172,7 @@ export function modelDisplayName(model: ModelInfo, badges = process.env['ACCESSM
 }
 
 export interface BridgeModalityOptions {
+  bridgeReasoning?: boolean;
   /**
    * T036：源的桥接图片路径是否已点亮（adapter.bridgeImages，真机往返验证过
    * 才为 true）。模型级还须 inputModalities 含 image 才亮 supportsImages——
@@ -210,5 +212,6 @@ export function modelDirectoryEntry(
     // 上游视觉标签不等于桥接已经能传图；亮标 = 源路径点亮 && 模型有视觉。
     bridgeInputModalities: imagesOn ? ['text', 'image'] : ['text'],
     supportsImages: imagesOn,
+    bridgeReasoning: bridgeReasoningCapability(metadata, opts.bridgeReasoning, adapterId),
   };
 }

@@ -102,14 +102,11 @@ export class TraeSoloBridge {
     if (target?.function !== undefined && body['function'] !== target.function) {
       body['function'] = target.function;
     }
-    if (typeof body['reasoning_effort'] === 'string') {
+    if (body['reasoning_effort'] !== undefined) {
       const entry = catalogList.find((m) => m.id === originalModel);
-      if (entry?.reasoning !== undefined) {
-        const requested = body['reasoning_effort'];
-        const allowed = entry.reasoning.supported;
-        if (!allowed.includes(requested as never)) {
-          delete body['reasoning_effort'];
-        }
+      const requested = body['reasoning_effort'];
+      if (typeof requested !== 'string' || !entry?.reasoning?.supported.includes(requested)) {
+        return { ok: false, status: 400, kind: 'client', message: 'Trae model does not advertise requested reasoning effort' };
       }
     }
     let bodyJson = JSON.stringify(body);

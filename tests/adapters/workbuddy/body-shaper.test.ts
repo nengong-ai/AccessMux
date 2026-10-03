@@ -146,6 +146,12 @@ describe('prepareWorkBuddyChatBody (CN)', () => {
 });
 
 describe('prepareWorkBuddyChatBody (Global)', () => {
+  it.each([undefined, 'cn', 'global'] as const)('public strict path rejects undeclared off and empty capabilities (%s)', variant => {
+    for (const reasoning_effort of ['off', 'high', 'unknown', null, 3]) {
+      expect(() => prepareWorkBuddyChatBody(JSON.stringify({ model: 'm', messages: [], reasoning_effort }),
+        { variant, reasoningSupported: [], strictReasoning: true })).toThrow(/does not advertise/);
+    }
+  });
   it('Global 端 off 在 supported 不含 off 时被删除', () => {
     const out = JSON.parse(prepareWorkBuddyChatBody(
       JSON.stringify({ model: 'm', messages: [], reasoning_effort: 'off' }),

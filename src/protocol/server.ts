@@ -22,7 +22,7 @@ import {
   toInternalMessages,
 } from './messages.js';
 import type { ConfigStore } from '../config/index.js';
-import type { ImagePart, TurnUsage } from '../types.js';
+import type { ChatCompletionChunk, ImagePart, TurnUsage } from '../types.js';
 import {
   assertAdapterAcceptsImages,
   assertImageCount,
@@ -37,6 +37,8 @@ import { modelDirectoryEntry } from '../ui/model-badges.js';
 import { requestDebug, requestLog } from './request-log.js';
 import { redactLogText } from '../util/redact.js';
 import { adapterEnabled, probeWithBudget } from './control-plane.js';
+import { bridgeReasoningCapability, REASONING_EFFORTS, type ReasoningEffort } from './reasoning.js';
+import { abortable } from '../util/abort.js';
 
 /** 从 launch 前起绑定生命周期；迟到的 session 也必须释放，绝不开始回合。 */
 function requestLifecycle(raw: ServerResponse) {
@@ -165,6 +167,7 @@ const chatRequestSchema = z.object({
     }),
   ).min(1),
   stream: z.boolean().optional(),
+  reasoning_effort: z.enum(REASONING_EFFORTS).optional(),
   // T023：OpenAI 惯例——客户端显式要 include_usage 才单独发 usage 帧（[DONE] 前）
   stream_options: z.object({ include_usage: z.boolean().optional() }).passthrough().optional(),
 });
@@ -297,10 +300,12 @@ async function streamOpenAiChatCompletion(
   includeUsage: boolean,
   lifecycle: RequestLifecycle,
   safeError: (err: unknown) => string,
+  reasoning_effort?: ReasoningEffort,
+  primedTurn?: { turn: AsyncIterable<ChatCompletionChunk>; startedAt: number },
 ): Promise<StreamOutcome> {
   const completionId = `chatcmpl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const created = Math.floor(Date.now() / 1000);
-  const streamStart = Date.now();
+  const streamStart = primedTurn?.startedAt ?? Date.now();
   const encoder = new TextEncoder();
   let firstChunkAt: number | undefined;
   // T023：adapter 上报的用量（真数或带标识估算）；缺位时按 accumulatedText 兜底估算
@@ -334,7 +339,7 @@ async function streamOpenAiChatCompletion(
   raw.write(encoder.encode(sseDataFrame(JSON.stringify(first))));
 
   try {
-    for await (const chunk of consumeTurn(session, { model: modelId, messages, stream: true }, lifecycle)) {
+    for await (const chunk of primedTurn?.turn ?? consumeTurn(session, { model: modelId, messages, stream: true, ...(reasoning_effort === undefined ? {} : { reasoning_effort }) }, lifecycle)) {
       if (aborted() || raw.writableEnded) break;
       firstChunkAt ??= Date.now();
       if (chunk.usage !== undefined) usage = chunk.usage;
@@ -470,7 +475,7 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
         // auth 未知不等于不可用（匿名源与 Qoder 实时目录无需在此证明登录）。
         if (!probe || probe.availability !== 'available' || probe.auth === 'logged-out'
           || probe.catalogSource === 'fallback' || probe.reasonCode === 'catalog-unavailable') return [];
-        const allModels = (probe?.models ?? []).map((m) => modelDirectoryEntry(a.id, m, { bridgeImages: a.bridgeImages }));
+        const allModels = (probe?.models ?? []).map((m) => modelDirectoryEntry(a.id, m, { bridgeImages: a.bridgeImages, bridgeReasoning: a.bridgeReasoning }));
         if (!routeFilter) return allModels;
         return allModels.filter((m) => {
           const inner = String(m['id']).slice(a.id.length + 1);
@@ -495,7 +500,7 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
       finish(400, {}, `请求体不合法（${parsed.error.issues.length} 项）`);
       return reply.code(400).send({ error: { message: '请求体不合法', details: parsed.error.issues } });
     }
-    const { model, stream, stream_options } = parsed.data;
+    const { model, stream, stream_options, reasoning_effort } = parsed.data;
     baseFields['model'] = model;
     baseFields['stream'] = Boolean(stream);
     const includeUsage = stream_options?.include_usage === true;
@@ -549,22 +554,58 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     }
 
     const lifecycle = requestLifecycle(reply.raw);
+    // Before launch/SSE headers: never bill a request whose explicit effort cannot be honored.
+    // Independent probes allow concurrent turns; control-plane pending suppression is for UI polling.
+    if (reasoning_effort !== undefined) {
+      try {
+        if (adapter.bridgeReasoning !== true) throw new Error('此来源尚未打通思考强度控制');
+        const signal = AbortSignal.any([lifecycle.signal, AbortSignal.timeout(positiveTimeout(String(opts.controlTimeoutMs ?? ''), 5_000))]);
+        const probe = await lifecycle.wait(abortable(adapter.probe({ signal }), signal));
+        const entry = probe.models.find((m) => m.id === modelId);
+        if (probe.availability !== 'available' || probe.auth === 'logged-out' || probe.catalogSource === 'fallback' || probe.reasonCode === 'catalog-unavailable' || !entry) {
+          throw new Error('当前模型目录不可用，无法确认思考强度');
+        }
+        const capability = bridgeReasoningCapability(entry, adapter.bridgeReasoning, adapter.id);
+        if (!capability.supportedEfforts.includes(reasoning_effort)) {
+          throw new Error(`模型不支持思考强度 ${reasoning_effort}；当前可用档位：${capability.supportedEfforts.join(', ') || '无'}`);
+        }
+      } catch (err) {
+        await lifecycle.finish();
+        const message = safeError(err);
+        finish(400, {}, message);
+        return reply.code(400).send({ error: { message, type: 'invalid_request_error', param: 'reasoning_effort' } });
+      }
+    }
     if (stream) {
       // 流式：接管 raw response 写 OpenAI SSE；Fastify 不再尝试 JSON 序列化
       let session: ProviderSession;
+      let primedTurn: { turn: AsyncIterable<ChatCompletionChunk>; startedAt: number } | undefined;
       try {
         session = await lifecycle.attach(adapter.launch({ localSecret, ...{ signal: lifecycle.signal } }));
+        if (reasoning_effort !== undefined) {
+          // The source checks its live catalog again while shaping. Await that
+          // step before headers so catalog changes at launch can still return 400.
+          const turn = consumeTurn(session, { model: modelId, messages, stream: true, reasoning_effort }, lifecycle);
+          const startedAt = Date.now();
+          const first = await turn.next();
+          primedTurn = { startedAt, turn: (async function* () {
+            try {
+              if (!first.done) yield first.value;
+              yield* turn;
+            } finally { void turn.return(undefined).catch(() => undefined); }
+          })() };
+        }
       } catch (err) {
         await lifecycle.finish();
         if (err instanceof AdapterNotImplementedError) {
           finish(501, {}, err.message);
           return reply.code(501).send({ error: { message: safeError(err) } });
         }
-        finish(500, {}, err);
+        finish((err as { statusCode?: number }).statusCode === 400 ? 400 : 500, {}, err);
         throw err;
       }
       reply.hijack();
-      const outcome = await streamOpenAiChatCompletion(reply.raw, model, modelId, messages, session, includeUsage, lifecycle, safeError);
+      const outcome = await streamOpenAiChatCompletion(reply.raw, model, modelId, messages, session, includeUsage, lifecycle, safeError, reasoning_effort, primedTurn);
       finish(
         outcome.ok ? 200 : 500,
         {
@@ -582,7 +623,7 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
       const session = await lifecycle.attach(adapter.launch({ localSecret, ...{ signal: lifecycle.signal } }));
       let content = '';
       let usage: TurnUsage | undefined;
-      for await (const chunk of consumeTurn(session, { model: modelId, messages, stream: false }, lifecycle)) {
+      for await (const chunk of consumeTurn(session, { model: modelId, messages, stream: false, ...(reasoning_effort === undefined ? {} : { reasoning_effort }) }, lifecycle)) {
         content += chunk.delta;
         if (chunk.usage !== undefined) usage = chunk.usage;
         if (chunk.done) break;
@@ -604,7 +645,7 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
         finish(501, {}, err.message);
         return reply.code(501).send({ error: { message: safeError(err) } });
       }
-      finish(500, {}, safeError(err));
+      finish((err as { statusCode?: number }).statusCode === 400 ? 400 : 500, {}, safeError(err));
       throw err;
     } finally {
       await lifecycle.finish();

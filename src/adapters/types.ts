@@ -37,6 +37,7 @@ export interface TurnInput {
   model: string;
   messages: ChatMessage[];
   stream: boolean;
+  reasoning_effort?: import('../protocol/reasoning.js').ReasoningEffort;
 }
 
 export interface ProviderSession {
@@ -55,6 +56,8 @@ export interface ProviderAdapter {
    * 模型级还须 catalog 的 inputModalities 含 image 才亮标，不虚标。
    */
   readonly bridgeImages?: boolean;
+  /** Explicit effort passes through the session and is checked against the live catalog. */
+  readonly bridgeReasoning?: boolean;
 
   /** 探测登录态与模型清单（catalog 层会缓存结果） */
   probe(ctx?: ProbeContext): Promise<ProbeResult>;

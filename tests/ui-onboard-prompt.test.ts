@@ -4,6 +4,10 @@ import { buildOnboardPrompt } from '../src/ui/public/onboard-prompt.js';
 const base = { uiUrlHint: 'http://127.0.0.1:43123/ui/' };
 
 describe('统一宿主接入提示词', () => {
+  it('思考能力取当前桥接控制与宿主交集，不猜档位或关闭思考', () => {
+    const prompt = buildOnboardPrompt(base);
+    for (const text of ['bridgeReasoning', 'supportedEfforts', '本机宿主 schema 值域的交集', '不默认关闭模型思考', '单档只配置该档', '不配置 off', 'reasoning_effort', '已有 AccessMux 只更新非秘密能力字段', '不自动执行付费验证']) expect(prompt).toContain(text);
+  });
   it('本机地址只作提示，接收机器独立确认服务与实时 canonical 目录', () => {
     const prompt = buildOnboardPrompt(base);
     expect(prompt).toContain('http://127.0.0.1:43123/ui/');

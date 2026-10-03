@@ -29,6 +29,8 @@ ${hint ? `- 生成此提示词的页面地址提示：${hint}/ui/。它只属于
 - 目录为空、请求失败或结构不合法时，保留宿主配置，说明本机没有可接入的当前目录，并引导在 UI 检查来源后刷新。不要猜模型、使用旧快照兜底或要求用户重写模型清单。
 - 复制后目录可能已经变化：写配置前重新 GET /v1/models。若目标 ID 已失效或不在新目录中，停止写入并说明；重新获取成功后，只对仍有效的模型幂等增量协调，不重复添加，也不删除用户已有供应商或默认模型。
 - 按你正在运行的宿主当前版本官方 schema 核实可用能力；不要因图标推断能力。此桥接提供 Chat Completions，不代表完整 Agent 工具调用或 Responses API 兼容。只有宿主明确需要且有当前服务已启用的公开证据时才使用 Anthropic 兼容端点；没有证据时说明限制，不猜测启用状态或擅自开协议。
+- 思考强度只能从接收机器实时目录的 bridgeReasoning（已打通桥接控制）取得：supported 必须为 true，支持档位取 supportedEfforts 与本机宿主 schema 值域的交集。reasoning.supported 只表示上游推理能力，不能据此开启可调档位；bridgeReasoning 缺失、未支持、档位为空或交集为空时，明确此桥接暂不能控制强度，不编造 low/medium/high，也不默认关闭模型思考。单档只配置该档；canDisableThinking 不为 true 时不配置 off。OpenAI Chat Completions 请求使用 reasoning_effort，不改选 Responses API。
+- 按宿主当前版本官方 schema 填写思考支持和支持档位；先核字段，不照搬别的宿主配置。已有 AccessMux 只更新非秘密能力字段，保留 ID、URL、key、其它 provider 和默认模型。若官方界面只能重新“校验并添加”、会调用模型消耗额度，或没有安全的能力更新入口，保留原条目并明确限制，不读取含 key 的私有配置，不自动执行付费验证。
 
 配置修改要求：
 - 优先使用宿主官方、当前版本支持的配置入口与 schema。先运行 accessmux help；若本次是源码安装且没有全局命令，则在此次实际仓库运行 node dist/cli/index.js help。按安装上下文选择已支持的入口，只在确认支持后对你当前这个宿主做有界操作；不要猜 flags，也不要运行会自动修改所有宿主的通用向导。
