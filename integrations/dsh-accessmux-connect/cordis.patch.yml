@@ -1,0 +1,5 @@
+# 把 AccessMux provider 挂进宿主 LLM seam。插件自管认证（INERT_AUTH），
+# 不经过 DSH credentials service，因此不设任何凭据即可用。
+- insert:
+    - id: llm-accessmux
+      name: dsh-accessmux-connect

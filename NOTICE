@@ -1,0 +1,98 @@
+AccessMux — incorporated source notices
+
+AccessMux's own code is licensed under its root MIT LICENSE. That license does
+not replace the terms applying to incorporated upstream portions. These notices
+cover adapted source and its compiled dist output, not the upstream applications
+or binaries themselves. Project names do not imply endorsement.
+
+1. dsh-workbuddy-connect
+   Source: https://github.com/corrinehu/dsh-workbuddy-connect
+   Local source baseline declares version 0.6.5.
+   Copyright (c) 2026 Corrine Hu
+   License: MIT; complete original text:
+   docs/third-party-licenses/dsh-workbuddy-connect-MIT.txt
+   Adapted portions: src/adapters/workbuddy/ (desktop credential protection,
+   AAD/decryption, helper, authentication/store, headers, request shaping,
+   catalog, reasoning and stream bridge); equivalent loopback shim mechanisms
+   were generalized into src/protocol/shim.ts.
+   AccessMux modifications include adapter interfaces, shared protocol/runtime
+   handling, diagnostics, lifecycle and security fixes.
+
+2. dsh-connect-trae
+   Source: https://github.com/dingminhua/dsh-connect-trae
+   Existing local snapshot declares version 2.4.0; the historical migration
+   specification describes a 2.3.x baseline. This is not a new version claim.
+   Copyright (c) 2026 LaoDing
+   License: MIT; complete original text:
+   docs/third-party-licenses/dsh-connect-trae-MIT.txt
+   Adapted portions: src/adapters/trae/ (credential decryption, region/path,
+   headers, refresh, catalog and SOLO bridge), src/protocol/sse.ts,
+   src/protocol/shim.ts, src/protocol/error-map.ts and src/util/redact.ts.
+   AccessMux modifications include generalized interfaces, protocol conversion,
+   lifecycle/security fixes and removal of synthetic device identities.
+   Upstream THIRD_PARTY_NOTICES identifies Wang-JQ77/dsh-trae-api and
+   laojichao/trae-local-api as protocol/research references, explicitly not code
+   redistributed by that upstream. This statement does not grant a license to
+   those separate projects or claim their code is incorporated here.
+
+3. ZCode
+   Source: https://github.com/zai-org/ZCode
+   Recorded migration baseline: 872ad96 (existing source modification notices).
+   Copyright 2026 Z.AI Co., Ltd
+   License: Apache License, Version 2.0; complete original text:
+   docs/third-party-licenses/ZCode-Apache-2.0.txt
+   Adapted portions:
+   - apps/zcode-cli/packages/adapters/src/auth/credential-cipher.ts
+     -> src/adapters/zcode/decrypt.ts: dependency injection, API extraction/
+        renaming and translated diagnostics.
+   - apps/zcode-cli/packages/core/src/context/sections/cli-prefix.ts and
+     identity.ts -> src/adapters/zcode/prefix.ts: extracted/combined builders,
+     omitted output-style/context machinery and added SHA-256 verification;
+     upstream harness prompt text is retained verbatim.
+   Modified files carry their own modification notices, retained in dist.
+
+   Relevant upstream ZCode NOTICE excerpt ("本仓库" refers to ZCode):
+   本仓库第一方代码依照根 LICENSE 采用 Apache-2.0；该许可不替其他权利人
+   新增授权，也不覆盖第三方软件、复制代码、原生二进制、字体、图标、网页素材
+   及其他资源的独立条款。具体依赖包详见 THIRD-PARTY-NOTICES.md。
+   受第三方版权、许可及再分发条件等约束，不承诺提供官方产品的全部功能及
+   活动政策，具体以实际发布的源码和构建产物为准。
+   Original notice: https://github.com/zai-org/ZCode/blob/main/NOTICE.md
+   Original inventory:
+   https://github.com/zai-org/ZCode/blob/main/THIRD-PARTY-NOTICES.md
+
+4. opencode (sst/opencode)
+   Source: https://github.com/sst/opencode (repository now redirects to
+   anomalyco/opencode)
+   Mechanism anchoring baseline: tag v1.18.31, commit 014614d — the adapter
+   src/adapters/opencode/ implements against the publicly documented opencode
+   server API (https://opencode.ai/docs/server) and source-level schemas
+   (serve/--pure flags, /session routes, permission schema, XDG paths,
+   auth env vars, /provider directory).
+   Copyright (c) 2025 opencode
+   License: MIT; complete original text:
+   docs/third-party-licenses/opencode-MIT.txt
+   No upstream opencode source code is incorporated into this repository's
+   adapted portions; the MIT text ships to document the anchoring basis of
+   the re-derived mechanism points (official server API anchoring).
+   Historical note: an earlier research reference, ow-bridge
+   (https://github.com/louchi1984-coder/ow-bridge, no license), is no longer
+   used as an implementation basis and is acknowledged here for the record
+   only.
+
+Dependency package licenses remain their respective owners' terms. This is a
+bounded incorporated-source inventory, not a legal opinion or a complete audit
+of every upstream dependency, Git history or release artifact.
+
+5. UI brand assets
+   The inline collection icons in src/ui/public/brand-assets.ts are from
+   Lobe Icons (https://github.com/lobehub/lobe-icons), Copyright (c) 2023 LobeHub,
+   MIT; the source commit and individual blob SHAs are retained in that file.
+   Full license: docs/third-party-licenses/LobeHub-MIT.txt.
+   The AccessMux wordmark uses outlined Montserrat letters with a custom x;
+   no font software is bundled. Montserrat: Copyright 2024 The Montserrat.Git
+   Project Authors (https://github.com/JulietaUla/Montserrat.git), SIL OFL 1.1.
+   Original font license: docs/third-party-licenses/Montserrat-OFL-1.1.txt.
+   Brand names and marks identify compatible products; no endorsement or
+   trademark ownership is claimed. Installed app icons are read locally at
+   runtime and are not distributed as application icon files in this source.

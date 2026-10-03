@@ -1,0 +1,314 @@
+{
+  "cn": {
+    "observed_at": "2026-01-01T00:00:00.000Z",
+    "models": [
+      {
+        "id": "synthetic-cn-0",
+        "name": "synthetic-cn-0",
+        "display_name": "Synthetic 0",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 0
+      },
+      {
+        "id": "synthetic-cn-1",
+        "name": "synthetic-cn-1",
+        "display_name": "Synthetic 1",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-2",
+        "name": "synthetic-cn-2",
+        "display_name": "Synthetic 2",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-3",
+        "name": "synthetic-cn-3",
+        "display_name": "Synthetic 3",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-4",
+        "name": "synthetic-cn-4",
+        "display_name": "Synthetic 4",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-5",
+        "name": "synthetic-cn-5",
+        "display_name": "Synthetic 5",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-6",
+        "name": "synthetic-cn-6",
+        "display_name": "Synthetic 6",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-7",
+        "name": "synthetic-cn-7",
+        "display_name": "Synthetic 7",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-8",
+        "name": "synthetic-cn-8",
+        "display_name": "Synthetic 8",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-9",
+        "name": "synthetic-cn-9",
+        "display_name": "Synthetic 9",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-10",
+        "name": "synthetic-cn-10",
+        "display_name": "Synthetic 10",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-11",
+        "name": "synthetic-cn-11",
+        "display_name": "Synthetic 11",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-12",
+        "name": "synthetic-cn-12",
+        "display_name": "Synthetic 12",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-13",
+        "name": "synthetic-cn-13",
+        "display_name": "Synthetic 13",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-14",
+        "name": "synthetic-cn-14",
+        "display_name": "Synthetic 14",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      },
+      {
+        "id": "synthetic-cn-15",
+        "name": "synthetic-cn-15",
+        "display_name": "Synthetic 15",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}",
+        "creditMultiplier": 1
+      }
+    ]
+  },
+  "ai": {
+    "observed_at": "2026-01-01T00:00:00.000Z",
+    "models": [
+      {
+        "id": "synthetic-ai-0",
+        "name": "synthetic-ai-0",
+        "display_name": "Synthetic 0",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-1",
+        "name": "synthetic-ai-1",
+        "display_name": "Synthetic 1",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-2",
+        "name": "synthetic-ai-2",
+        "display_name": "Synthetic 2",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-3",
+        "name": "synthetic-ai-3",
+        "display_name": "Synthetic 3",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-4",
+        "name": "synthetic-ai-4",
+        "display_name": "Synthetic 4",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-5",
+        "name": "synthetic-ai-5",
+        "display_name": "Synthetic 5",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-6",
+        "name": "synthetic-ai-6",
+        "display_name": "Synthetic 6",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-7",
+        "name": "synthetic-ai-7",
+        "display_name": "Synthetic 7",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-8",
+        "name": "synthetic-ai-8",
+        "display_name": "Synthetic 8",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      },
+      {
+        "id": "synthetic-ai-9",
+        "name": "synthetic-ai-9",
+        "display_name": "Synthetic 9",
+        "context_window_tokens": {
+          "dev": 128000,
+          "max": 200000
+        },
+        "max_output_tokens": 8192,
+        "features": "{\"support_vision\": false}"
+      }
+    ]
+  }
+}

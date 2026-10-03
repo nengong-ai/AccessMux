@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#F5F5F7" />
+  <title>AccessMux · 本地模型控制台</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="AccessMux 首页"><span class="wordmark">AccessMux<span class="wordmark-x">×</span></span></a>
+    <span class="local-tag"><span class="status-dot" aria-hidden="true"></span>本地运行</span>
+    <button id="probe-btn" type="button" class="secondary">刷新状态</button>
+  </header>
+  <main id="top">
+    <aside class="section-nav" aria-label="页面区块">
+      <span class="nav-caption">工作区</span>
+      <a href="#hosts-block" data-nav="hosts-block"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg>宿主接入</a>
+      <a href="#source-status-block" data-nav="source-status-block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-6 4 12 2-6h4"/></svg>桥接源状态</a>
+      <a href="#models-block" data-nav="models-block" aria-current="location"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>桥接源与模型</a>
+      <a href="#checkin-block" data-nav="checkin-block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>签到</a>
+      <a href="#output-block" data-nav="output-block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>输出设置</a>
+      <div class="nav-foot"><span>本地保存</span><small>更改后即时生效</small><hr /><span>不上传配置</span><small>不加载远程字体或图标</small></div>
+    </aside>
+    <div class="content">
+      <div class="page-heading">
+        <div><h1>把模型，接到你的工作里。</h1><p class="intro">选择来源，启用模型。所有更改仅保存在本机。</p></div>
+        <span id="save-status" class="status" role="status" aria-live="polite"></span>
+      </div>
+      <div id="load-status" role="status" class="loading-state"><div class="loading-heading"><span class="skeleton-block"></span><span class="skeleton-block"></span></div><div class="loading-hosts"><span class="skeleton-card"></span><span class="skeleton-card"></span><span class="skeleton-card"></span></div><div class="loading-models"><span class="skeleton-card"></span><span class="skeleton-card"></span><span class="skeleton-card"></span></div><p>正在读取本机状态…</p></div>
+      <section id="wizard" class="notice" hidden>
+        <h2>先从常用宿主开始</h2><p>尚未保存配置。模型默认开放；你的更改会自动保存。也可以生成默认配置。</p>
+        <p class="config-path">配置位置：<code id="wizard-config-path"></code></p><button id="wizard-finish" type="button">生成默认配置</button>
+      </section>
+      <section id="config" hidden>
+        <section id="hosts-block" class="section" aria-labelledby="hosts-title">
+          <div class="section-heading"><div><h2 id="hosts-title">宿主接入</h2><p class="hint">复制接入提示词，交给你使用的 Agent 完成配置</p></div><button id="onboard-open" type="button" class="text-button onboard-open">接入提示词</button></div>
+          <div id="hosts-list" class="host-grid"></div>
+          <p class="hint section-note">“已接入”只表示配置已存在，不代表连接已测试；“未确认”不等于未安装。配置完成后刷新模型列表；若未出现 AccessMux，请完全退出并重新打开应用。命令行宿主可能需要新开会话。</p>
+        </section>
+        <section id="source-status-block" class="section" aria-labelledby="source-status-title">
+          <div class="section-heading"><div><h2 id="source-status-title">桥接源状态</h2><p class="hint">目录、登录和环境状态分别显示；刷新不会改模型勾选</p></div></div>
+          <div id="source-status-list" class="source-status-grid"></div>
+        </section>
+        <section id="models-block" class="section" aria-labelledby="models-title">
+          <div class="section-heading section-heading-wide"><div><h2 id="models-title">就绪源模型</h2><p class="hint">只把已取得且满足访问条件的目录放在这里</p></div><span id="model-count" class="hint"></span></div>
+          <div class="catalog-toolbar">
+            <label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input id="model-search" type="search" placeholder="搜索模型或桥接源" aria-label="搜索模型或桥接源" /></label>
+            <input id="free-only" class="visually-hidden" type="checkbox" aria-label="只看免费模型" />
+            <div class="filter-segment" role="group" aria-label="模型费用筛选"><button type="button" data-free-filter="false" aria-pressed="true">全部模型</button><button type="button" data-free-filter="true" aria-pressed="false">只看免费</button></div>
+            <button type="button" id="clear-filters" class="text-button" hidden>清空筛选</button>
+          </div>
+          <p class="catalog-explainer">免费状态与倍率以各客户端/官网口径为准，随活动变化；倍率表示额度消耗，未知数据不会猜测。</p>
+          <div id="models-list"></div>
+          <p class="hint section-note">图片输入只在桥接实际开放时标为可用；上游支持但桥接未点亮时会明确提示。宿主若缓存模型清单，请刷新或重新同步。</p>
+        </section>
+        <section id="checkin-block" class="section" aria-labelledby="checkin-title">
+          <div class="section-heading"><h2 id="checkin-title">签到</h2><p class="hint">为支持的来源领取每日额度</p></div>
+          <div id="checkin-list" class="checkin-grid"></div>
+          <p class="hint section-note">Qoder 需先通过 <code>accessmux checkin --set-pat</code> 保存个人访问令牌；本页不接收或显示令牌。Trae 需设备身份校验，ZCode 无需签到。</p>
+        </section>
+        <section id="output-block" class="section output-section" aria-labelledby="output-title">
+          <div class="section-heading"><h2 id="output-title">输出设置</h2><p class="hint">接入地址始终清楚可见</p></div>
+          <div class="output-card">
+            <div class="setting"><span class="setting-name">兼容接口</span><code id="endpoint-display"></code></div>
+            <div class="output-pills"><span>OpenAI 兼容</span><span id="anthropic-summary">Anthropic 未启用</span></div>
+            <div class="output-actions"><button id="output-options-btn" type="button" class="secondary" aria-expanded="false">协议与端口</button><button id="copy-endpoint" type="button">复制地址</button></div>
+          </div>
+          <details class="output-details" id="output-details"><summary>输出选项</summary><div class="output-grid">
+            <label class="setting"><span class="setting-name">监听端口</span><input id="port-output" type="number" min="1" max="65535" required /><span class="hint">更改后需重启服务并同步宿主地址。</span></label>
+            <div class="setting"><span class="setting-name">Anthropic 兼容端点</span><div class="switch-setting"><label class="switch-control"><input id="expose-anthropic" type="checkbox" role="switch" aria-label="启用 Anthropic 兼容端点" /><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label><span>启用</span></div><span class="hint">Claude Code 等宿主使用；目前仅支持非流式对话。</span></div>
+            <span class="setting"><span class="setting-name">绑定地址</span><code>127.0.0.1 · 固定</code><span class="hint">只允许本机访问。</span></span>
+          </div><div class="actions"><span id="output-save-status" class="status" role="status" aria-live="polite"></span><button id="save-btn" type="button">保存输出设置</button><button id="reset-btn" type="button" class="text-button">重置源与模型</button></div><p class="config-path">配置文件：<code id="config-path-display"></code></p></details>
+        </section>
+      </section>
+    </div>
+  </main>
+  <footer><span class="footer-brand">AccessMux</span><p>额度属于你的账号。目录与领取状态仅保留在本机，不上传、不建立历史台账。</p></footer>
+      <dialog id="onboard-dialog" aria-labelledby="onboard-title"><div class="dialog-heading"><h2 id="onboard-title">让 Agent 帮你接入</h2><button id="onboard-close" type="button" class="text-button" aria-label="关闭接入提示词">关闭</button></div><p>把提示词粘贴给正在使用的 Agent，让它接入自己。</p><textarea id="onboard-prompt" aria-label="接入提示词" readonly rows="16"></textarea><div class="dialog-actions"><button id="copy-onboard" type="button">复制提示词</button><span id="onboard-status" role="status" class="hint" aria-live="polite"></span></div></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

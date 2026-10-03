@@ -1,0 +1,53 @@
+{
+  "name": "accessmux",
+  "version": "0.1.0",
+  "description": "统一管理免费/低价 LLM 入口的桥接器：把桌面 IDE 锁定额度经统一 OpenAI/Anthropic 兼容端点开放给任意宿主",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["llm", "openai", "anthropic", "proxy", "cli", "local-first"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nengong-ai/AccessMux.git"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/ui/public/*.html",
+    "dist/ui/public/*.css",
+    "docs/release-runbook.md",
+    "docs/third-party-licenses/*.txt",
+    "NOTICE",
+    "README.md",
+    "INSTALL.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "install.sh"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "accessmux": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "prepack": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "tsx src/cli/index.ts",
+    "start": "node dist/cli/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "esbuild": "^0.24.0",
+    "fastify": "^5.2.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0",
+    "ws": "^8.22.0"
+  }
+}
