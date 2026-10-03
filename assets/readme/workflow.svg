@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+<title id="title">AccessMux 桥接流程（概念图）</title>
+<desc id="desc">来源账号额度或上游免费档，经过 AccessMux 本机端点，接到当前 Agent。额度仍由各来源提供。</desc>
+<rect width="1200" height="300" rx="20" fill="#F5F5F7"/>
+<g id="flow" fill="none" stroke="#0066CC" stroke-width="4" stroke-linecap="round">
+<path d="M336 150H444M756 150H864"/>
+<path d="M432 140 444 150 432 160M852 140 864 150 852 160"/>
+</g>
+<g id="source"><rect x="40" y="56" width="296" height="188" rx="16" fill="#FFFFFF"/>
+<text x="188" y="138" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="44" font-weight="650" fill="#1D1D1F">已有额度</text>
+<text x="188" y="184" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="25" fill="#606068">本机账号 / 免费档</text></g>
+<g id="bridge"><rect x="444" y="56" width="312" height="188" rx="16" fill="#E9F2FF"/>
+<text x="600" y="138" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="44" font-weight="650" fill="#0066CC">AccessMux</text>
+<text x="600" y="184" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="25" fill="#0066CC">本机兼容端点</text></g>
+<g id="host"><rect x="864" y="56" width="296" height="188" rx="16" fill="#FFFFFF"/>
+<text x="1012" y="138" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="44" font-weight="650" fill="#1D1D1F">当前 Agent</text>
+<text x="1012" y="184" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="25" fill="#606068">沿用你的工作流</text></g>
+</svg>
