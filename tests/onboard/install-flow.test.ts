@@ -6,6 +6,7 @@ import { runOnboard } from '../../src/onboard/onboard.js';
 import { openUi } from '../../src/onboard/open-ui.js';
 import { ensureDaemon } from '../../src/onboard/daemon.js';
 import { allHosts } from '../../src/onboard/hosts.js';
+import { fixtureUiResponse } from './fixture-ui.js';
 
 const dirs: string[] = [];
 afterEach(() => { vi.restoreAllMocks(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -18,7 +19,7 @@ function fixture(models = ['trae-cn:synthetic']) {
   const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input); requests.push(url);
     if (pathname(input).endsWith('/health')) return new Response(JSON.stringify({ok: true, service: 'accessmux'}));
-    if (pathname(input).endsWith('/ui')) return new Response('<html>synthetic UI</html>', {headers: {'content-type': 'text/html'}});
+    const ui = fixtureUiResponse(input); if (ui) return ui;
     if (pathname(input).endsWith('/v1/models')) return new Response(JSON.stringify({data: models.map(id => ({id}))}));
     throw new Error('推理/签到/其它网络操作不允许');
   });
@@ -67,7 +68,21 @@ describe('T039 当前宿主与开页', () => {
     expect(readFileSync(path, 'utf8')).toBe(first); expect(readdirSync(join(f.home, '.workbuddy'))).toEqual(files);
     expect(readFileSync(join(f.home, '.zcode/v2/provider_config.json'), 'utf8')).toBe(zcode);
     expect(f.opened).toEqual(['http://127.0.0.1:8080/ui', 'http://127.0.0.1:8080/ui']);
-    expect(f.requests.every(url => /\/(health|ui|v1\/models)$/.test(new URL(url).pathname))).toBe(true);
+    expect(f.requests.every(url => /\/(health|ui\/?|ui\/app.js|ui\/style.css|v1\/models)$/.test(new URL(url).pathname))).toBe(true);
+  });
+  it('旧AccessMux UI坏时自动换健康端口，备份且只迁移WorkBuddy自己的URL', async () => {
+    const f = fixture();
+    expect(await runOnboard({host: 'workbuddy', yes: true}, f.deps)).toBe(0);
+    const file = join(f.home, '.workbuddy/models.json'); const before = readFileSync(file, 'utf8');
+    const fetchFn = async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.port === '8080' && url.pathname.startsWith('/ui')) return new Response('connect failed', {status: 500});
+      return f.deps.fetchFn(input);
+    };
+    expect(await runOnboard({host: 'workbuddy', yes: true}, {...f.deps, fetchFn: fetchFn as typeof fetch})).toBe(0);
+    expect(readFileSync(file, 'utf8')).toBe(before.replace('http://127.0.0.1:8080/v1/chat/completions', 'http://127.0.0.1:8081/v1/chat/completions'));
+    expect(f.opened.at(-1)).toBe('http://127.0.0.1:8081/ui');
+    expect(readdirSync(join(f.home, '.workbuddy')).length).toBeGreaterThan(2);
   });
   it('无模型仍开页、非零退出、不写空配置', async () => {
     const f = fixture([]); const before = readFileSync(join(f.home, '.workbuddy/models.json'), 'utf8');
@@ -100,13 +115,13 @@ describe('T039 当前宿主与开页', () => {
     expect(run).toHaveBeenCalledWith('open', ['http://127.0.0.1:8888/ui']);
   });
   it('其它服务即使 health ok 也不复用；下一端口已有 AccessMux 时复用，不重复起', async () => {
-    const spawnFn = vi.fn(); const fetchFn = vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(String(input).includes(':18081/') ? {ok:true, service:'accessmux'} : {ok:true, service:'other'})));
+    const spawnFn = vi.fn(); const fetchFn = vi.fn(async (input: RequestInfo | URL) => fixtureUiResponse(input) ?? new Response(JSON.stringify(String(input).includes(':18081/') ? {ok:true, service:'accessmux'} : {ok:true, service:'other'})));
     const result = await ensureDaemon(18080, {fetchFn:fetchFn as typeof fetch, spawnFn:spawnFn as never, portAvailable: async () => false});
     expect(result).toEqual({baseURL:'http://127.0.0.1:18081', port:18081, started:false}); expect(spawnFn).not.toHaveBeenCalled();
   });
   it('旧版 health + 正确 UI 标题可复用，无重复 daemon', async () => {
     const spawnFn = vi.fn();
-    const fetchFn = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/ui') ? new Response('<title>AccessMux 本地配置</title>') : new Response(JSON.stringify({ok:true, adapters:['qoder']})));
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => fixtureUiResponse(input) ?? new Response(JSON.stringify({ok:true, adapters:['qoder']})));
     expect((await ensureDaemon(18080, {fetchFn:fetchFn as typeof fetch, spawnFn:spawnFn as never})).started).toBe(false);
     expect(spawnFn).not.toHaveBeenCalled();
   });

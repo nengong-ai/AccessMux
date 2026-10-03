@@ -33,7 +33,9 @@ describe('incorporated source redistribution notices', () => {
     expect(pkg.files).toContain('NOTICE');
     expect(pkg.files).toContain('docs/third-party-licenses/*.txt');
     expect(pkg.scripts.prepack).not.toContain('--removeComments');
-    expect(text('README.md')).toContain('[第三方声明](NOTICE)');
+    const readmeLinks = [...text('README.md').matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map((match) => match[1]);
+    expect(readmeLinks.some((link) => link === 'NOTICE' || link === './NOTICE'
+      || /^https:\/\/github\.com\/nengong-ai\/AccessMux\/blob\/[^/?#]+\/NOTICE$/.test(link ?? ''))).toBe(true);
     for (const file of ['decrypt.ts', 'prefix.ts']) {
       const source = text(`src/adapters/zcode/${file}`);
       expect(source).toContain('Copyright 2026 Z.AI Co., Ltd');

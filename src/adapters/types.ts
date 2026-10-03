@@ -16,7 +16,7 @@ export interface ProbeResult {
   /** 目录来处；fallback 不代表可用清单。 */
   catalogSource?: 'current' | 'cache' | 'fallback';
   /** 本次检测的公开原因码，不得包含原始错误或凭据。 */
-  reasonCode?: 'not-installed' | 'not-logged-in' | 'catalog-unavailable' | 'catalog-fallback' | 'directory-ready' | 'login-unverified';
+  reasonCode?: 'not-installed' | 'not-logged-in' | 'credential-unavailable' | 'catalog-unavailable' | 'catalog-fallback' | 'directory-ready' | 'login-unverified';
   observedAt?: string;
 }
 

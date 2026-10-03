@@ -48,17 +48,17 @@ export async function fetchModelIds(binary: string, deps: ListModelsDeps = {}): 
 /** 模型 id → ModelInfo（provider 固定 'qoder'；未实证模型带 'unverified' 标签）。 */
 export function modelsFromIds(ids: readonly string[], metadata: QoderMetadataMap = {}): ModelInfo[] {
   return ids.map((id) => {
-    const fields = metadata[id] ?? {};
+    const { customProvider, ...fields } = metadata[id] ?? {};
     const official = officialModelContext(id);
     return {
     id,
     provider: 'qoder',
-    tags: VERIFIED_MODELS.has(id) ? ['chat'] : ['chat', 'unverified'],
+    tags: customProvider ? ['chat', 'custom-provider', 'unverified'] : VERIFIED_MODELS.has(id) ? ['chat'] : ['chat', 'unverified'],
     ...fields,
     ...(fields.minCtx ?? official ? { minCtx: fields.minCtx ?? official } : {}),
     ...(official === undefined ? {} : { officialContext: official }),
-    callVerified: VERIFIED_MODELS.has(id),
-    ...(VISION_VERIFIED_MODELS.has(id) ? { inputModalities: ['text', 'image'] as Array<'text' | 'image'> } : {}),
+    callVerified: !customProvider && VERIFIED_MODELS.has(id),
+    ...(!customProvider && VISION_VERIFIED_MODELS.has(id) ? { inputModalities: ['text', 'image'] as Array<'text' | 'image'> } : {}),
     };
   });
 }

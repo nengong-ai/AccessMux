@@ -221,11 +221,11 @@ describe('WorkBuddyCredentialStore: 错误透出（T001R4 #2）', () => {
     await expect(store.resolve()).rejects.toThrow(/keyId does not match|auth failed/);
   });
 
-  it('status() 吞错但带 reason（底层 cause 透出到状态）', async () => {
+  it('status() 读取/解密失败为 unknown，不能要求用户重新登录', async () => {
     const store = makeStore(fs, { desktopPath: '/auth/info' });
     fs.files.set('/auth/info', 'not-json-at-all');
     const status = await store.status();
-    expect(status.state).toBe('signed-out');
+    expect(status.state).toBe('unknown');
     expect(status.reason).toMatch(/could not be read or decrypted/);
   });
 

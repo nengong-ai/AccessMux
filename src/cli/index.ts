@@ -49,6 +49,7 @@ function help(): void {
   accessmux ui   [--port <n>]    仅启动本地配置界面（默认 8081，仅 127.0.0.1）
   accessmux onboard --host <id> [--yes]  当前宿主接入、启动/复用服务、打开 UI
                       [--all-hosts] [--dry-run] [--smoke] [--no-open-ui]
+  accessmux service stop [--port <n>]  停止并卸载本安装登记的 macOS 后台服务
   宿主 id: zcode, workbuddy, dsh, claude-code, codex, hermes,
            trae, qoder
   accessmux status                各 adapter 探测状态
@@ -175,6 +176,15 @@ async function main(): Promise<void> {
   if (cmd === '--version' || cmd === '-v') {
     const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     console.log(version);
+    return;
+  }
+  if (cmd === 'service') {
+    if (args[1] !== 'stop') throw new Error('用法：accessmux service stop [--port <n>]');
+    if (process.platform !== 'darwin') throw new Error('此命令只管理 macOS 的独立后台服务；其它系统请正常停止运行 accessmux serve 的进程。');
+    const { stopLaunchdDaemon } = await import('../onboard/launchd.js');
+    const { resolveRepoRoot } = await import('../onboard/daemon.js');
+    await stopLaunchdDaemon({ repoRoot: resolveRepoRoot(), port: parsePort(args, 'ACCESSMUX_PORT', 8080), configPath });
+    console.log('AccessMux 独立后台服务已停止并卸载；账号、登录与宿主配置保留。');
     return;
   }
   registerDefaultAdapters();

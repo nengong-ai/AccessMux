@@ -315,18 +315,18 @@ export class TraeCredentialStore {
   }
 
   /**
-   * 探测登录态——UI / 状态展示用，永不抛错。
+   * 探测登录态——有记录但无法读取不能判为登出。
    */
   async status(): Promise<
-    { state: 'signed-in' | 'signed-out'; edition?: TraeEdition; expiresAtMs?: number; source?: TraeCredential['source'] }
+    { state: 'signed-in' | 'signed-out' | 'unknown'; edition?: TraeEdition; expiresAtMs?: number; source?: TraeCredential['source'] }
   > {
     try {
       const credential = await this.current();
-      return credential === undefined
-        ? { state: 'signed-out' }
-        : { state: 'signed-in', edition: credential.edition, expiresAtMs: credential.expiresAtMs, source: credential.source };
+      if (credential !== undefined) return { state: 'signed-in', edition: credential.edition, expiresAtMs: credential.expiresAtMs, source: credential.source };
+      const hasRecord = [...this.candidates().map((candidate) => candidate.path), ...this.ownCandidates()].some((path) => this.fs.existsSync(path));
+      return { state: hasRecord ? 'unknown' : 'signed-out' };
     } catch {
-      return { state: 'signed-out' };
+      return { state: 'unknown' };
     }
   }
 

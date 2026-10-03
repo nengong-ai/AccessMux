@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { spawn as SpawnT } from 'node:child_process';
-import { daemonLogPath, ensureDaemon } from '../../src/onboard/daemon.js';
+import { ensureDaemon } from '../../src/onboard/daemon.js';
 import { dirname } from 'node:path';
+import { fixtureUiResponse } from './fixture-ui.js';
 
 let tmpDir = '';
 beforeEach(() => {
@@ -19,15 +20,17 @@ afterEach(() => {
 });
 
 function okHealth(): typeof fetch {
-  return (async () =>
-    new Response(JSON.stringify({ ok: true, service: 'accessmux', adapters: ['fake'] }), {
+  return (async (input: RequestInfo | URL) =>
+    fixtureUiResponse(input) ?? new Response(JSON.stringify({ ok: true, service: 'accessmux', adapters: ['fake'] }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })) as unknown as typeof fetch;
 }
 
 function deadHealth(): typeof fetch {
-  return (async () => {
+  return (async (input: RequestInfo | URL) => {
+    const ui = fixtureUiResponse(input);
+    if (ui) return ui;
     throw new Error('connect ECONNREFUSED');
   }) as unknown as typeof fetch;
 }
@@ -35,7 +38,9 @@ function deadHealth(): typeof fetch {
 /** 先拒绝 N 次再变好（模拟 spawn 后 daemon 渐渐 ready） */
 function flappingHealth(failTimes: number): typeof fetch {
   let calls = 0;
-  return (async () => {
+  return (async (input: RequestInfo | URL) => {
+    const ui = fixtureUiResponse(input);
+    if (ui) return ui;
     calls++;
     if (calls <= failTimes) throw new Error('connect ECONNREFUSED');
     return new Response(JSON.stringify({ ok: true, service: 'accessmux' }), { status: 200 });
@@ -67,6 +72,8 @@ describe('ensureDaemon', () => {
     }) as unknown as typeof SpawnT;
     const handle = await ensureDaemon(9099, {
       fetchFn: flappingHealth(2),
+      platform: 'linux',
+      logPath: join(tmpDir, 'logs', 'daemon.log'),
       spawnFn,
       repoRoot: tmpDir,
       readyTimeoutMs: 5000,
@@ -78,7 +85,7 @@ describe('ensureDaemon', () => {
   }, 10000);
 
   it('daemon 日志先私有原子替换，父进程spawn后关闭fd', async () => {
-    const path = daemonLogPath();
+    const path = join(tmpDir, 'logs', 'daemon.log');
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, 'old log', { mode: 0o644 });
     chmodSync(path, 0o644);
@@ -89,7 +96,7 @@ describe('ensureDaemon', () => {
       expect(fstatSync(fd).mode & 0o777).toBe(0o600);
       return { unref: () => {} };
     }) as unknown as typeof SpawnT;
-    await ensureDaemon(9099, { fetchFn: flappingHealth(1), spawnFn, repoRoot: tmpDir });
+    await ensureDaemon(9099, { fetchFn: flappingHealth(1), platform: 'linux', spawnFn, repoRoot: tmpDir, logPath: path });
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
     expect(() => fstatSync(fd)).toThrow();
@@ -100,6 +107,8 @@ describe('ensureDaemon', () => {
     await expect(
       ensureDaemon(9098, {
         fetchFn: deadHealth(),
+        platform: 'linux',
+        logPath: join(tmpDir, 'logs', 'daemon.log'),
         spawnFn,
         repoRoot: tmpDir,
         readyTimeoutMs: 1200,

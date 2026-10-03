@@ -34,6 +34,17 @@ describe('T033 前端公开交互约束', () => {
     expect(source).toContain("import { formatModelActivity } from './activity-presentation.js'");
     expect(source).not.toContain('标签展示时段');
   });
+  it('接入提示词与本机模型和费用状态解耦，只传页面地址提示', () => {
+    const body = source.slice(source.indexOf('function renderOnboardPrompt(): void {'), source.indexOf('async function openOnboard()'));
+    expect(body).toContain('uiUrlHint: window.location.origin');
+    expect(body).not.toContain('state.');
+    expect(body).not.toContain('models');
+    expect(body).not.toContain('modelBadges');
+    expect(body).toContain("('#copy-onboard').disabled = false");
+    expect(prompt).toContain('写配置前重新 GET /v1/models');
+    expect(prompt).not.toContain('input.models');
+    expect(prompt).not.toContain('input.exposeAnthropic');
+  });
   it('reset仅重置选择且auto签到启用前明确确认', () => {
     expect(source).toContain("'/api/config/reset-selection'");
     expect(source).not.toContain("'/api/config/reset'");

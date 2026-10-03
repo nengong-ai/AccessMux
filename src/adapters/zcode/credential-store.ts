@@ -15,7 +15,7 @@ import { createZcodeCredentialCipher, isEncryptedZcodeCredentialValue } from './
 export const ZCODE_JWT_KEY = 'zcodejwttoken';
 
 export class ZcodeCredentialError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly reason: 'missing' | 'unreadable' = 'unreadable') {
     super(message);
     this.name = 'ZcodeCredentialError';
   }
@@ -41,7 +41,7 @@ function readJsonFile(path: string): Record<string, unknown> {
   try {
     text = readFileSync(path, 'utf-8');
   } catch (error) {
-    throw new ZcodeCredentialError(`读不到 ${path}：${(error as Error).message}`);
+    throw new ZcodeCredentialError(`读不到 ${path}：${(error as Error).message}`, (error as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'missing' : 'unreadable');
   }
   try {
     const parsed = JSON.parse(text) as unknown;

@@ -10,7 +10,7 @@
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { OnboardError } from './errors.js';
-import { daemonLogPath, ensureDaemon, resolveRepoRoot } from './daemon.js';
+import { ensureDaemon, resolveRepoRoot } from './daemon.js';
 import { redactLogText } from '../util/redact.js';
 import { makeAsk } from './interact.js';
 import { openUi } from './open-ui.js';
@@ -44,6 +44,7 @@ export interface OnboardDeps {
   log(line?: string): void;
   sleep(ms: number): Promise<void>;
   isTTY: boolean;
+  platform: NodeJS.Platform;
 }
 
 interface HostState {
@@ -55,6 +56,7 @@ interface HostState {
   smokeDetail?: string;
   /** T024：本次跑过 refresh 且判定"已是最新"（未写盘） */
   refreshCurrent?: boolean;
+  endpointMigrated?: boolean;
 }
 
 const DEFAULT_PORT = 8080;
@@ -83,6 +85,7 @@ export async function runOnboard(
     log: depsPartial.log ?? ((line?: string) => console.log(line ?? '')),
     sleep: depsPartial.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))),
     isTTY: depsPartial.isTTY ?? Boolean(process.stdin.isTTY),
+    platform: process.platform,
     ...depsPartial,
   };
   try {
@@ -212,14 +215,19 @@ async function runFlow(options: OnboardOptions, deps: OnboardDeps): Promise<numb
     fetchFn: deps.fetchFn,
     spawnFn: deps.spawnFn,
     repoRoot: deps.repoRoot,
+    homeDir: deps.homeDir,
+    platform: deps.platform,
     ...(deps.configPath === undefined ? {} : { configPath: deps.configPath }),
   });
   log(
     daemon.started
-      ? `  已在后台启动服务（${daemon.baseURL}，日志见 ${daemonLogPath()}）`
+      ? daemon.launcher === 'launchd'
+        ? `  已由 macOS 启动独立后台服务（${daemon.baseURL}）；退出当前 Agent 后仍可打开，不会设置开机自启。`
+        : `  已在后台启动服务（${daemon.baseURL}）`
       : `  复用已在跑的后台服务（${daemon.baseURL}）`,
   );
   const uiURL = `${daemon.baseURL}/ui`;
+  if (daemon.recoveredFrom !== undefined) log(`  旧控制台不可用，已自动准备健康控制台：${uiURL}`);
   let uiReady = false;
   // 首屏 bootstrap 读取宿主配置；成功注册/刷新后再开页，失败和无源也给诊断入口。
   async function showUi(): Promise<void> {
@@ -265,11 +273,21 @@ async function runFlow(options: OnboardOptions, deps: OnboardDeps): Promise<numb
       let matches: boolean | undefined;
       try { matches = s.def.endpointMatches?.(ctx); } catch { matches = false; }
       if (matches === true || matches === undefined && daemon.port === deps.port) continue;
+      if (daemon.recoveredFrom !== undefined && s.def.migrateEndpoint) {
+        try {
+          const migrated = await s.def.migrateEndpoint(ctx, `http://127.0.0.1:${daemon.recoveredFrom}`);
+          if (migrated && s.def.endpointMatches?.(ctx) === true) {
+            s.result = migrated; s.endpointMigrated = true;
+            log(`  ↻ ${s.def.name}：${migrated.summary}`);
+            continue;
+          }
+        } catch { /* 不覆盖不认识的登记，保留下面的明确未完成说明。 */ }
+      }
       s.error = '既有宿主配置的地址尚未确认匹配当前服务；本次不覆盖配置。请核对原端口后重跑，或按官方接法核对地址。';
       log(`  △ ${s.def.name}：${s.error}`);
     }
     // 不把旧端口的登记当成新端口已接入，也不自动覆盖既有清单。
-    for (let i = refreshTargets.length - 1; i >= 0; i--) if (refreshTargets[i]?.error) refreshTargets.splice(i, 1);
+    for (let i = refreshTargets.length - 1; i >= 0; i--) if (refreshTargets[i]?.error || refreshTargets[i]?.endpointMigrated) refreshTargets.splice(i, 1);
   }
   if (daemon.port !== 8080) {
     for (const s of installed.filter((s) => s.def.id === 'dsh')) {

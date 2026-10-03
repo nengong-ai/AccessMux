@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:net';
 import { OnboardError } from './errors.js';
+import { ownsLaunchdDaemon, startLaunchdDaemon, stopLaunchdDaemon, type LaunchctlRun, type LaunchdHandle, type LaunchdOptions } from './launchd.js';
 
 export function daemonLogPath(): string {
   // 独立私有目录；不能为收紧日志权限而 chmod 共享临时目录。
@@ -25,6 +26,13 @@ export interface DaemonDeps {
   repoRoot?: string;
   /** spawn 后等待 ready 的时长（毫秒），默认 20000 */
   readyTimeoutMs?: number;
+  platform?: NodeJS.Platform;
+  homeDir?: string;
+  launchctlRun?: LaunchctlRun;
+  /** 仅作启动策略判断，绝不打印或持久化宿主环境。 */
+  environment?: NodeJS.ProcessEnv;
+  /** 离线测试注入私有日志位置，避免触及真实运行日志。 */
+  logPath?: string;
 }
 
 export interface DaemonHandle {
@@ -32,6 +40,9 @@ export interface DaemonHandle {
   port: number;
   /** true = 本次 onboard 启动的守护；false = 复用已在跑的 */
   started: boolean;
+  launcher?: 'launchd' | 'detached';
+  /** 明确识别的旧AccessMux UI已坏；迁移宿主只允许针对这个旧本地端点。 */
+  recoveredFrom?: number;
 }
 
 /** 从本模块位置向上找到仓库根（含 name=accessmux 的 package.json 的目录） */
@@ -57,24 +68,33 @@ export function resolveRepoRoot(): string {
   );
 }
 
-async function fetchHealth(baseURL: string, fetchFn: typeof fetch): Promise<boolean> {
+type Probe = { kind: 'ready' | 'absent' | 'foreign' | 'ui-broken'; failedAsset?: string };
+
+/** health 识别身份；HTML 和真实 JS/CSS 一起确认，不能用 health 200 冒充能开页。 */
+export async function probeDaemon(baseURL: string, fetchFn: typeof fetch): Promise<Probe> {
   try {
     const res = await fetchFn(`${baseURL}/health`, {
       signal: AbortSignal.timeout(1500),
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { kind: 'absent' };
     const body = (await res.json()) as { ok?: boolean; service?: string; adapters?: unknown };
-    if (body.ok !== true) return false;
-    if (body.service === 'accessmux') return true;
-    // 旧版尚无 service 标记：只读核对目录形状和 UI 标题，避免重复启动旧服务。
+    if (body.ok !== true) return { kind: 'foreign' };
     const known = ['workbuddy', 'trae-cn', 'trae-global', 'opencode', 'qoder', 'zcode'];
-    if (body.service === undefined && Array.isArray(body.adapters) && body.adapters.every((id) => known.includes(id))) {
-      const ui = await fetchFn(`${baseURL}/ui`, { signal: AbortSignal.timeout(1500) });
-      return ui.ok && /<title>\s*AccessMux(?:\s|<)/i.test(await ui.text());
+    const legacy = body.service === undefined && Array.isArray(body.adapters) && body.adapters.every((id) => known.includes(id));
+    if (body.service !== 'accessmux' && !legacy) return { kind: 'foreign' };
+    for (const [route, contentType] of [['/ui/', 'text/html'], ['/ui/app.js', 'javascript'], ['/ui/style.css', 'text/css']] as const) {
+      try {
+        const asset = await fetchFn(`${baseURL}${route}`, { signal: AbortSignal.timeout(1500) });
+        const text = asset.ok ? await asset.text() : '';
+        if (!asset.ok || !asset.headers.get('content-type')?.includes(contentType) || !text.trim()
+          || route === '/ui/' && !/<title>\s*AccessMux(?:\s|<)/i.test(text)) {
+          return legacy && route === '/ui/' ? { kind: 'foreign' } : { kind: 'ui-broken', failedAsset: route };
+        }
+      } catch { return { kind: 'ui-broken', failedAsset: route }; }
     }
-    return false;
+    return { kind: 'ready' };
   } catch {
-    return false;
+    return { kind: 'absent' };
   }
 }
 
@@ -93,16 +113,30 @@ export async function portAvailable(port: number): Promise<boolean> {
 export async function ensureDaemon(port: number, deps: DaemonDeps = {}): Promise<DaemonHandle> {
   const fetchFn = deps.fetchFn ?? fetch;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new OnboardError('端口必须为 1–65535 的整数');
+  const platform = deps.platform ?? process.platform;
+  const environment = deps.environment ?? process.env;
+  const repoRoot = deps.repoRoot ?? resolveRepoRoot();
+  const launchdOptions = (servicePort: number): LaunchdOptions => ({ repoRoot, port: servicePort, environment, ...(deps.configPath === undefined ? {} : { configPath: deps.configPath }), ...(deps.homeDir === undefined ? {} : { homeDir: deps.homeDir }), ...(deps.launchctlRun === undefined ? {} : { run: deps.launchctlRun }) });
+  let recoveredFrom: number | undefined;
   let baseURL = '';
   const firstPort = port;
   for (; port < Math.min(firstPort + 20, 65536); port++) {
     baseURL = `http://127.0.0.1:${port}`;
-    if (await fetchHealth(baseURL, fetchFn)) return { baseURL, port, started: false };
+    const probe = await probeDaemon(baseURL, fetchFn);
+    if (probe.kind === 'ready') return { baseURL, port, started: false, ...(recoveredFrom === undefined ? {} : { recoveredFrom }) };
+    if (probe.kind === 'ui-broken') {
+      recoveredFrom ??= port;
+      if (platform === 'darwin' && await ownsLaunchdDaemon(launchdOptions(port))) {
+        await stopLaunchdDaemon(launchdOptions(port));
+        if (await (deps.portAvailable ?? portAvailable)(port)) break;
+      }
+      // 旧版或不明进程不强杀：沿原有空闲端口策略创建健康的独立服务。
+      continue;
+    }
     if (await (deps.portAvailable ?? portAvailable)(port)) break;
   }
   if (port >= Math.min(firstPort + 20, 65536)) throw new OnboardError('附近端口均被占用，请用 --port 指定空闲端口');
   // spawn 生产入口：仓库根/dist/cli/index.js
-  const repoRoot = deps.repoRoot ?? resolveRepoRoot();
   const entry = join(repoRoot, 'dist', 'cli', 'index.js');
   if (!existsSync(entry)) {
     throw new OnboardError(
@@ -110,32 +144,43 @@ export async function ensureDaemon(port: number, deps: DaemonDeps = {}): Promise
       '构建产物是 onboard 启动守护的唯一入口（生产路径）。',
     );
   }
-  const spawnFn = deps.spawnFn ?? spawn;
-  const logPath = daemonLogPath();
-  writePrivateFileSync(logPath, '');
-  const logFd = openSync(logPath, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
-  try {
-    const args = [entry, 'serve', '--port', String(port)];
-    if (deps.configPath !== undefined) args.push('--config', deps.configPath);
-    const child = spawnFn(process.execPath, args, {
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
-    });
-    child.unref();
-  } finally {
-    // 子进程已继承 fd，父进程不能一直持有。
-    closeSync(logFd);
+  if (platform !== 'darwin' && (environment.CODEBUDDY_BROKERED_FS_HOOK_ENABLED === '1' || environment.CODEBUDDY_SAFE_DELETE_SANDBOX === '1')) {
+    throw new OnboardError('当前宿主使用会话绑定的文件访问代理；此系统尚不能自动创建独立后台服务。本次安装未完成，请在系统终端运行同一 onboard 命令，无需重新登录或提供密钥。');
+  }
+  let managed: LaunchdHandle | undefined;
+  if (platform === 'darwin') {
+    managed = await startLaunchdDaemon(launchdOptions(port));
+  } else {
+    const spawnFn = deps.spawnFn ?? spawn;
+    const logPath = deps.logPath ?? daemonLogPath();
+    writePrivateFileSync(logPath, '');
+    const logFd = openSync(logPath, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
+    try {
+      const args = [entry, 'serve', '--port', String(port)];
+      if (deps.configPath !== undefined) args.push('--config', deps.configPath);
+      const child = spawnFn(process.execPath, args, {
+        detached: true,
+        stdio: ['ignore', logFd, logFd],
+      });
+      child.unref();
+    } finally {
+      // 子进程已继承 fd，父进程不能一直持有。
+      closeSync(logFd);
+    }
   }
   const timeout = deps.readyTimeoutMs ?? 20000;
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    if (await fetchHealth(baseURL, fetchFn)) {
-      return { baseURL, port, started: true };
+    if ((await probeDaemon(baseURL, fetchFn)).kind === 'ready') {
+      return { baseURL, port, started: true, launcher: platform === 'darwin' ? 'launchd' : 'detached', ...(recoveredFrom === undefined ? {} : { recoveredFrom }) };
     }
     await new Promise((r) => setTimeout(r, 500));
   }
+  // 仅清理本次新注册的受控 job，不强杀已有服务或任意端口进程。
+  if (managed?.registered) {
+    try { await managed.stop(); } catch { throw new OnboardError(`后台服务未完整就绪（端口 ${port}），且系统没有确认停止。本次安装未完成；请用 accessmux service stop --port ${port} 正常停止后重试。`); }
+  }
   throw new OnboardError(
-    `后台服务启动超时（端口 ${port}，日志：${logPath}）。` +
-      '可以手动启动后再跑一次 onboard：accessmux serve',
+    `后台服务启动超时（端口 ${port}）；控制台 HTML、JS 和 CSS 尚未全部就绪。本次安装未完成，不需要重登或提供密钥。`,
   );
 }

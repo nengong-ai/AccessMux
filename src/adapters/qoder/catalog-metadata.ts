@@ -7,7 +7,10 @@ import type { ModelInfo, MetadataSource, TokenLimit } from '../../types.js';
 import { positiveTokens, source, tokenLimit } from './catalog-specs.js';
 import { fetchQoderCampaigns } from '../../checkin/qoder.js';
 
-export type QoderModelMetadata = Omit<Partial<ModelInfo>, 'id' | 'provider' | 'tags'>;
+export type QoderModelMetadata = Omit<Partial<ModelInfo>, 'id' | 'provider' | 'tags'> & {
+  /** 来源于实际 providers.models 设置；不是按模型名推断。 */
+  customProvider?: true;
+};
 export type QoderMetadataMap = Record<string, QoderModelMetadata>;
 export interface QoderMetadataDeps {
   signal?: AbortSignal;
@@ -127,7 +130,7 @@ export function parseQoderTextCache(raw: unknown, updatedAt: string): { aliases:
   return { aliases, models };
 }
 
-/** 模型参数缓存只挑 token 窗口，第三方 provider 的 key/headers 完全不返回。 */
+/** 只挑 token 窗口和自定义来源标记，第三方 provider 的 key/headers 完全不返回。 */
 export function parseQoderSettings(raw: unknown, aliases: Record<string, string>, updatedAt: string): QoderMetadataMap {
   const root = object(raw) ?? {}; const result: QoderMetadataMap = {};
   const preferences = object(object(root['model'])?.['preferences']) ?? {};
@@ -142,7 +145,7 @@ export function parseQoderSettings(raw: unknown, aliases: Record<string, string>
     for (const rawModel of rows) {
       const row = object(rawModel); const id = text(row?.['model']) ?? text(row?.['id']);
       const limit = tokenLimit(row?.['contextWindow'], source('qoder:settings/custom-model', 'providers.models.contextWindow', updatedAt));
-      if (id && limit) result[`${provider}/${id}`] = { minCtx: limit };
+      if (id) result[`${provider}/${id}`] = { customProvider: true, ...(limit ? { minCtx: limit } : {}) };
     }
   }
   return result;
@@ -201,6 +204,7 @@ export async function collectQoderMetadata(deps: QoderMetadataDeps = {}): Promis
       const [contents, info] = await Promise.all([readFile(settingsFile, { encoding: 'utf8', signal: deps.signal }), stat(settingsFile)]);
       const settings = parseQoderSettings(JSON.parse(contents), aliases, info.mtime.toISOString());
       for (const [id, fields] of Object.entries(settings)) {
+        if (fields.customProvider) result[id] = { ...result[id], customProvider: true };
         const old = result[id]?.minCtx; const fresh = fields.minCtx;
         if (typeof fresh === 'object' && (typeof old !== 'object' || Date.parse(fresh.source.updated_at) >= Date.parse(old.source.updated_at))) result[id] = { ...result[id], ...fields };
       }

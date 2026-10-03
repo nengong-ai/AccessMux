@@ -150,11 +150,12 @@ export async function snapshotAdapterInfo(
     let nextAction: string;
     if (!enabled) { sourceState = knownDisabled.has(adapter.id) ? 'environment-disabled' : 'disabled'; sourceMessage = sourceState === 'environment-disabled' ? '被启动环境禁用' : '配置中已关闭'; nextAction = sourceState === 'environment-disabled' ? '移除禁用设置后重启 AccessMux' : '在此启用后刷新'; }
     else if (probe?.reasonCode === 'not-installed') { sourceState = 'not-installed'; sourceMessage = '没有找到对应客户端'; nextAction = '安装对应官方客户端后刷新'; }
+    else if (probe?.reasonCode === 'credential-unavailable') { sourceState = 'failed'; sourceMessage = '登录信息暂无法读取'; nextAction = '检查官方客户端安装位置与本地访问是否正常，再刷新；无需提供密钥'; }
     else if (probe?.auth === 'logged-out') { sourceState = 'logged-out'; sourceMessage = '未登录或登录已失效'; nextAction = '在对应应用重新登录，再刷新状态'; }
     else if (readyDirectory) { sourceState = 'ready'; sourceMessage = adapter.id === 'opencode' ? '目录就绪，无需登录' : probe?.auth === 'unknown' ? '目录已取得，登录态未确认' : '目录已取得'; nextAction = probe?.auth === 'unknown' && adapter.id !== 'opencode' ? '使用前请在对应应用确认登录；此状态不代表调用已验证' : '可查看并选择已取得的模型'; }
     else if (attempt?.status === 'pending') { sourceState = 'probing'; sourceMessage = '已有探测仍在进行'; nextAction = '等待当前探测结束后再刷新'; }
     else if (probe?.reasonCode === 'catalog-unavailable' || attempt?.status === 'timeout' || attempt?.status === 'failed') { sourceState = 'failed'; sourceMessage = attempt?.status === 'timeout' ? '探测超时' : '本次目录或元数据未更新'; nextAction = '稍后重试；保留上次目录与费用结果'; }
-    else if (probe?.catalogSource === 'fallback' || probe?.availability === 'unverified') { sourceState = 'unconfirmed'; sourceMessage = probe?.reasonCode === 'catalog-fallback' ? '当前只有未登录回退目录' : '目录或访问条件未确认'; nextAction = '按提示检查对应应用或登录状态'; }
+    else if (probe?.catalogSource === 'fallback' || probe?.availability === 'unverified') { sourceState = 'unconfirmed'; sourceMessage = probe?.reasonCode === 'catalog-fallback' ? '当前只有候选目录，尚未取得实时目录' : '目录或访问条件未确认'; nextAction = probe?.auth === 'logged-in' ? '检查网络和来源服务后刷新' : '按提示检查对应应用或登录状态'; }
     else { sourceState = 'unconfirmed'; sourceMessage = '目录与访问状态未确认'; nextAction = '检查对应应用状态后刷新'; }
     return {
       id: adapter.id,

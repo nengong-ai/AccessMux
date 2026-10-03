@@ -2,22 +2,23 @@
 //
 // 直连（D23）：读 `~/.zcode/v2/credentials.json` 解密 zcodejwttoken，直打官方
 // messages 端点，body.system 首块携带官方开源 harness 前缀（sha256 自检）。
-// 历史兜底：`zcode app-server` 已禁用；直连失效时明确报不可用。
+// 兜底（D21）：常驻 `zcode app-server` 协议依附，前缀门变化/直连失效时自动切换。
 // 单源隔离（D8）：probe/launch/fetchQuota 失败都收敛在自己身上。
 // 铁律：JWT 无 refresh（401 = 需重新登录，不做刷新）；429 限流可重试；
-// 405/3012 = 前缀门（明确报不可用，不改写前缀）；token 原值不落日志。
+// 405/3012 = 前缀门（降级兜底，不改写前缀）；token 原值不落日志。
 
 import type { LaunchContext, ProbeResult, ProviderAdapter, ProviderSession } from '../types.js';
 import type { QuotaState } from '../../types.js';
 import { startPlanModelInfos, modelInfosFor } from './catalog.js';
 import { loadZcodeCredential, ZcodeCredentialError } from './credential-store.js';
 import { fetchZcodeBalance, fetchZcodeQuota } from './quota.js';
+import { ZcodeUpstreamError } from './error-classify.js';
 import { verifyOfficialPrefix } from './prefix.js';
 import { APP_SERVER_DISABLED_REASON, ZcodeAppServerHost, type ExitGuardTarget, type ZcodeSpawnFn } from './app-server.js';
 import { redactLogText } from '../../util/redact.js';
 import { ZcodeSession, type ZcodeForm, type ZcodeFormState } from './session.js';
 
-/** 形态配置兼容字段；仅 direct 可用，app-server 配置会被拒绝。 */
+/** 手动指定形态（默认 direct=自动降级；app-server=只用兜底，D23 被否决时用）。 */
 export const ZCODE_FORM_ENV = 'ACCESSMUX_ZCODE_FORM';
 
 export interface ZcodeAdapterOptions {
@@ -46,7 +47,7 @@ export class ZcodeAdapter implements ProviderAdapter {
   /**
    * T036 图片路径已点亮：直连形态按标准 Anthropic image block（base64 source）
    * 塑形，GLM-5.3-Flash 真机图片往返验证过（详见 docs/host-integration.md
-   * 能力口径与 internal development record）。GLM-5.2 / GLM-5-Turbo 未验证，catalog 不盖
+   * 能力口径与 receipts/R036）。GLM-5.2 / GLM-5-Turbo 未验证，catalog 不盖
    * inputModalities，模型级保持灰标。
    */
   readonly bridgeImages = true;
@@ -80,7 +81,7 @@ export class ZcodeAdapter implements ProviderAdapter {
    * 级清单，权益粒度可能只放行其一，T019 真机实证 GLM-5.2/GLM-5-Turbo 吃
    * 400/3006）；balance 拿不到（unknown）或匹配不到模型 capability 时退回
    * 固定三名 + unverified——权益以 balance 为准，拿不到就不下结论。
-   * 直连门槛（前缀门）不在此处烧模型请求验证——真回合里 405/3012 明确报不可用，不启动兜底。
+   * 直连门槛（前缀门）不在此处烧模型请求验证——真回合里 405 会自动降级兜底形态。
    */
   async probe(ctx?: { signal?: AbortSignal }): Promise<ProbeResult> {
     ctx?.signal?.throwIfAborted();
@@ -94,8 +95,12 @@ export class ZcodeAdapter implements ProviderAdapter {
     try {
       credential = this.loadCredential();
     } catch (error) {
-      this.log(`probe：凭据不可用（${(error as ZcodeCredentialError).message}）`);
-      return { availability: 'unavailable', models: [], auth: 'logged-out' };
+      ctx?.signal?.throwIfAborted();
+      this.log('probe：本地登录信息暂无法读取');
+      if (error instanceof ZcodeCredentialError && error.reason === 'missing') {
+        return { availability: 'unavailable', models: [], auth: 'logged-out' };
+      }
+      return { availability: 'unverified', models: [], auth: 'unknown', reasonCode: 'credential-unavailable' };
     }
     let outcome;
     try {
@@ -103,10 +108,15 @@ export class ZcodeAdapter implements ProviderAdapter {
         { jwt: credential.jwt, deviceMid: credential.deviceMid },
         { fetchImpl: this.options.fetchImpl, env: this.options.env, log: this.rawLog, timeoutMs: this.options.quotaTimeoutMs, signal: ctx?.signal },
       );
-    } catch {
-      // balance 401（relogin）：解密出的 JWT 已被服务端拒绝
-      return { availability: 'unavailable', models: [], auth: 'logged-out' };
+    } catch (error) {
+      ctx?.signal?.throwIfAborted();
+      if (error instanceof ZcodeUpstreamError && error.kind === 'relogin' && error.status === 401) {
+        // 明确 401 才能证明 JWT 被上游拒绝。
+        return { availability: 'unavailable', models: [], auth: 'logged-out' };
+      }
+      return { availability: 'unverified', models: [], auth: 'logged-in', reasonCode: 'catalog-unavailable' };
     }
+    ctx?.signal?.throwIfAborted();
     if (outcome.entitledModels !== undefined) {
       // ok/exhausted 都证明"解密成功 + balance 200"，且拿到了权益模型清单
       this.log(`probe：权益模型 = ${outcome.entitledModels.join(' / ')}（以 balance 为准）`);

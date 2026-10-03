@@ -466,6 +466,10 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
       listAdapters().map(async (a) => {
         if (!adapterEnabled(a.id, cfg)) return [];
         const probe = await probeWithBudget(a, opts.controlTimeoutMs, { signal: lifecycle.signal });
+        // 安装/接入只消费当前可用目录；离线候选与失败缓存留给 UI 历史展示。
+        // auth 未知不等于不可用（匿名源与 Qoder 实时目录无需在此证明登录）。
+        if (!probe || probe.availability !== 'available' || probe.auth === 'logged-out'
+          || probe.catalogSource === 'fallback' || probe.reasonCode === 'catalog-unavailable') return [];
         const allModels = (probe?.models ?? []).map((m) => modelDirectoryEntry(a.id, m, { bridgeImages: a.bridgeImages }));
         if (!routeFilter) return allModels;
         return allModels.filter((m) => {

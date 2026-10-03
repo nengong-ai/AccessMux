@@ -102,8 +102,12 @@ export class TraeAdapter implements ProviderAdapter {
     signal?.throwIfAborted();
     if (!this.isEnabled()) return { availability: 'unavailable', models: [] };
     const status = await this.credentialStore.status();
+    signal?.throwIfAborted();
     if (status.state === 'signed-out') {
       return { availability: 'unavailable', models: [], auth: 'logged-out', reasonCode: 'not-logged-in' };
+    }
+    if (status.state === 'unknown') {
+      return { availability: 'unverified', models: [], auth: 'unknown', reasonCode: 'credential-unavailable' };
     }
     try {
       await this.refreshCatalog({ force: true, signal });

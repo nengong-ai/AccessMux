@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import type { spawn as SpawnT } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runOnboard } from '../../src/onboard/onboard.js';
+import { fixtureUiResponse } from './fixture-ui.js';
 
 let home = '';
 let repoRoot = '';
@@ -33,7 +34,7 @@ function fakeDaemon(models: string[] = MODELS): { fetchFn: typeof fetch; chatCal
   const chats: string[] = [];
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith('/ui')) return new Response('<html>fixture UI</html>', { headers: { 'content-type': 'text/html' } });
+    const ui = fixtureUiResponse(input); if (ui) return ui;
     if (url.endsWith('/health')) {
       return new Response(JSON.stringify({ ok: true, service: 'accessmux', adapters: ['workbuddy', 'trae-cn'] }), {
         status: 200,
@@ -316,7 +317,7 @@ describe('runOnboard 端到端', () => {
     const offline = deps({
       fetchFn: (async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.endsWith('/ui')) return new Response('<html>fixture UI</html>', { headers: { 'content-type': 'text/html' } });
+        const ui = fixtureUiResponse(input); if (ui) return ui;
     if (url.endsWith('/health')) {
           return new Response(JSON.stringify({ ok: true, service: 'accessmux' }), { status: 200 });
         }
@@ -340,7 +341,7 @@ describe('runOnboard 端到端', () => {
       fetchFn: (async (input: RequestInfo | URL) => {
         attempts++;
         if (String(input).endsWith('/health')) return new Response(JSON.stringify({ok: true, service: 'accessmux'}));
-        if (String(input).endsWith('/ui')) return new Response('<html>fixture UI</html>', {headers: {'content-type': 'text/html'}});
+        const ui = fixtureUiResponse(input); if (ui) return ui;
         return new Response('probe not ready', { status: 500 });
       }) as unknown as typeof fetch,
     });
@@ -349,7 +350,7 @@ describe('runOnboard 端到端', () => {
     const out = logs.join('\n');
     expect(out).toContain('[探测中]');
     expect(out).not.toContain('<adapterId>:<modelId>');
-    expect(attempts).toBe(3); // health + UI + 一次目录采集，不重复起服务
+    expect(attempts).toBe(6); // health + HTML/JS/CSS + 开页前HTML + 一次目录采集
   });
 
   it('探针秒回：指引示例名用真实模型 id（T024 束 2）', async () => {

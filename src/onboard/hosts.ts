@@ -69,6 +69,8 @@ export interface HostDef {
   detect(ctx: HostContext): DetectResult;
   /** 只读核对已登记端点，不能把配置存在当成当前地址已接入。 */
   endpointMatches?(ctx: HostContext): boolean;
+  /** 仅恢复明确识别的本产品旧本地端点，不改模型ID、Key或其它provider。 */
+  migrateEndpoint?(ctx: HostContext, previousBaseURL: string): Promise<OnboardResult | null>;
   onboard?(ctx: HostContext): Promise<OnboardResult>;
   /**
    * 已接入后的"模型清单同步"（可选；目前仅 ZCode）：
@@ -200,10 +202,47 @@ function zcodeProviderRules(parsed: unknown): unknown[] | null {
   return Array.isArray(rules) ? rules : null;
 }
 
+export async function migrateAccessMuxEndpoint(ctx: HostContext, host: 'workbuddy' | 'zcode', previousBaseURL: string): Promise<OnboardResult | null> {
+  if (!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(previousBaseURL) || !/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(ctx.baseURL) || previousBaseURL === ctx.baseURL) return null;
+  const file = host === 'workbuddy' ? workbuddyFilePath(ctx) : zcodeFilePath(ctx);
+  const text = readTextOrThrow(file, '宿主接入配置');
+  const parsed = parseJson(text);
+  const replacements: Array<{ range: { start: number; end: number }; value: string }> = [];
+  const canonical = (id: unknown): boolean => typeof id === 'string' && /^(workbuddy|trae-cn|trae-global|opencode|qoder|zcode):.+$/.test(id);
+  if (host === 'workbuddy') {
+    const shape = workbuddyArrayPointer(parsed);
+    if (!shape) return null;
+    shape.entries.forEach((raw, index) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+      const row = raw as { id?: unknown; name?: unknown; url?: unknown };
+      if (!canonical(row.id) || typeof row.name !== 'string' || !row.name.startsWith('AccessMux ·') || row.url !== `${previousBaseURL}/v1/chat/completions`) return;
+      const pointer = shape.pointer.length ? [...shape.pointer, index, 'url'] : [index, 'url'];
+      replacements.push({ range: locateValue(text, pointer), value: JSON.stringify(`${ctx.baseURL}/v1/chat/completions`) });
+    });
+  } else {
+    const rules = zcodeProviderRules(parsed);
+    if (!rules || rules.filter(raw => raw && typeof raw === 'object' && (raw as { providerName?: unknown }).providerName === 'AccessMux').length !== 1) return null;
+    const index = zcodeAccessMuxIndex(parsed);
+    if (index < 0) return null;
+    const api: Pointer = ['config', 'providerConfigRules', 'providerRules', index, 'config', 'api'];
+    const models = getByPointer(parsed, ['config', 'providerConfigRules', 'providerRules', index, 'config', 'personalModelIds']);
+    if (!Array.isArray(models) || !models.length || !models.every(canonical) || getByPointer(parsed, [...api, 'baseUrl']) !== `${previousBaseURL}/v1` || getByPointer(parsed, [...api, 'type']) !== 'openai-chat-completions') return null;
+    replacements.push({ range: locateValue(text, [...api, 'baseUrl']), value: JSON.stringify(`${ctx.baseURL}/v1`) });
+  }
+  if (!replacements.length) return null;
+  let edited = text;
+  for (const item of replacements.sort((a, b) => b.range.start - a.range.start)) edited = edited.slice(0, item.range.start) + item.value + edited.slice(item.range.end);
+  parseJson(edited);
+  const backup = backupFile(file, { now: ctx.now });
+  atomicWrite(file, edited, fileMode(file, host === 'zcode' ? 0o600 : 0o644));
+  return { files: [{ path: file, backup }], summary: `已备份并将 ${replacements.length} 个 AccessMux 接入地址迁移到恢复后的服务（只改本产品 URL）` };
+}
+
 const zcodeHost: HostDef = {
   id: 'zcode',
   name: 'ZCode',
   kind: 'auto',
+  migrateEndpoint: (ctx, previousBaseURL) => migrateAccessMuxEndpoint(ctx, 'zcode', previousBaseURL),
   endpointMatches(ctx) {
     const parsed = parseJson(readTextOrThrow(zcodeFilePath(ctx), 'ZCode provider 配置'));
     const index = zcodeAccessMuxIndex(parsed);
@@ -367,6 +406,7 @@ const workbuddyHost: HostDef = {
   id: 'workbuddy',
   name: 'WorkBuddy',
   kind: 'auto',
+  migrateEndpoint: (ctx, previousBaseURL) => migrateAccessMuxEndpoint(ctx, 'workbuddy', previousBaseURL),
   endpointMatches(ctx) {
     const parsed = parseJson(readTextOrThrow(workbuddyFilePath(ctx), 'WorkBuddy 自定义模型配置'));
     const entries = workbuddyArrayPointer(parsed)?.entries ?? [];

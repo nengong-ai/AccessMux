@@ -132,6 +132,9 @@ export class WorkBuddyAdapter implements ProviderAdapter {
     if (status.state === 'signed-out') {
       return { availability: 'unavailable', models: fallbackModelsFor(this.variant).map((m) => toModelInfo(m, this.id)), auth: 'logged-out', catalogSource: 'fallback', reasonCode: 'not-logged-in' };
     }
+    if (status.state === 'unknown') {
+      return { availability: 'unverified', models: [], auth: 'unknown', reasonCode: 'credential-unavailable' };
+    }
     try {
       await this.refreshCatalog({ force: true, signal });
       const models = this.catalog.current();

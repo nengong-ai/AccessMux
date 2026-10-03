@@ -144,17 +144,20 @@ export class WorkBuddyCredentialStore {
     this.fs = options.fs ?? defaultFs;
   }
 
-  /** 探测登录态：never throws；异常透出为 signed-out + reason（对齐 dsh auth.ts:445-461）。 */
-  async status(signal?: AbortSignal): Promise<{ state: 'signed-in' | 'signed-out'; variant: WorkBuddyVariant; expiresAtMs?: number; source?: WorkBuddyCredential['source']; reason?: string }> {
+  /** 只把没有登录记录判为登出；读取/解密/helper 失败不能证明用户未登录。 */
+  async status(signal?: AbortSignal): Promise<{ state: 'signed-in' | 'signed-out' | 'unknown'; variant: WorkBuddyVariant; expiresAtMs?: number; source?: WorkBuddyCredential['source']; reason?: string }> {
     try {
       const credential = await this.current(signal);
-      return credential === undefined
-        ? { state: 'signed-out', variant: this.variant }
-        : { state: 'signed-in', variant: this.variant, expiresAtMs: credential.expiresAtMs, source: credential.source };
+      signal?.throwIfAborted();
+      if (credential !== undefined) return { state: 'signed-in', variant: this.variant, expiresAtMs: credential.expiresAtMs, source: credential.source };
+      const hasRecord = [...this.desktopCandidates(), this.ownAuthPath()].some((path) => this.fs.existsSync(path));
+      return hasRecord
+        ? { state: 'unknown', variant: this.variant, reason: 'WorkBuddy login information could not be read or decrypted' }
+        : { state: 'signed-out', variant: this.variant };
     } catch (error: unknown) {
-      // 解密失败 / spawn 失败 / 文件损坏是"可诊断的登出态"，不是静默的：
-      // 状态只交安全提示，不回显未知文件内容或底层异常。
-      return { state: 'signed-out', variant: this.variant, reason: 'WorkBuddy credential could not be read or decrypted; sign in again' };
+      signal?.throwIfAborted();
+      // 安全固定提示；不回显原值，也不要求用户交 Key 或一概重登。
+      return { state: 'unknown', variant: this.variant, reason: 'WorkBuddy login information could not be read or decrypted' };
     }
   }
 

@@ -375,16 +375,8 @@ async function claim(source: string): Promise<void> {
   renderCheckin();
 }
 function renderOnboardPrompt(): void {
-  if (!state) return;
-  const models = state.adapters.filter((adapter) => adapter.directoryReady && sourceEnabled(adapter.id))
-    .flatMap((adapter) => adapter.models.filter((model) => modelEnabled(adapter.id, model.id)).map((model) => {
-      const fee = modelBadges(model).replace(/<[^>]*>/g, '').trim();
-      return { id: `${adapter.id}:${model.id}`, displayName: model.name ?? model.id, ...(fee ? { fees: fee } : {}) };
-    }));
   $<HTMLTextAreaElement>('#onboard-prompt').value = buildOnboardPrompt({
-    port: state.config.output.port,
-    exposeAnthropic: state.config.output.exposeAnthropic,
-    models,
+    uiUrlHint: window.location.origin,
   });
   $<HTMLButtonElement>('#copy-onboard').disabled = false;
 }
